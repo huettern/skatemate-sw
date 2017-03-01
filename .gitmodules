@@ -1,0 +1,5 @@
+[submodule "ChibiOS"]
+	path = ChibiOS
+	url = https://github.com/ChibiOS/ChibiOS
+	branch = stable_16.1.x
+
