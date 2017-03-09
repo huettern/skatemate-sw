@@ -1,0 +1,4 @@
+[submodule "motorcontrol/ChibiOS"]
+	path = motorcontrol/ChibiOS
+	url = https://github.com/ChibiOS/ChibiOS
+	branch = stable_16.1.x
