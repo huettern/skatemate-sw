@@ -86,14 +86,14 @@ endif
 PROJECT = skatemate
 
 # Imported source files and paths
-CHIBIOS = ChibiOS/
-BOARD = board/
+CHIBIOS = ChibiOS
+BOARD = board
 
 # Startup files.
-include $(CHIBIOS)/os/hal/ports/STM32/STM32F3xx/platform.mk
+include $(CHIBIOS)/os/common/ports/ARMCMx/compilers/GCC/mk/startup_stm32f3xx.mk
 # HAL-OSAL files (optional).
+include $(CHIBIOS)/os/hal/ports/STM32/STM32F3xx/platform.mk
 include $(CHIBIOS)/os/hal/hal.mk
-include $(CHIBIOS)/os/hal/ports/STM32/STM32F37x/platform.mk
 include $(BOARD)/board.mk
 include $(CHIBIOS)/os/hal/osal/rt/osal.mk
 # RTOS files (optional).
@@ -119,6 +119,9 @@ CSRC = $(STARTUPSRC) \
        $(CHIBIOS)/os/hal/lib/streams/chprintf.c \
        $(CHIBIOS)/os/hal/lib/streams/memstreams.c \
        $(CHIBIOS)/os/various/shell.c \
+       usbcfg.c \
+       usbcdc.c \
+       util.c \
        main.c 
 
 # C++ sources that can be compiled in ARM or THUMB mode depending on the global
@@ -150,10 +153,8 @@ ASMSRC = $(STARTUPASM) $(PORTASM) $(OSALASM)
 
 INCDIR = $(STARTUPINC) $(KERNINC) $(PORTINC) $(OSALINC) \
          $(HALINC) $(PLATFORMINC) $(BOARDINC) $(TESTINC) \
-         $(CHIBIOS)/os/various $(CHIBIOS)/os/hal/lib/streams \
-         $(ESP8266INC) $(SDCARDINC) $(FATFSINC) $(ANALOGINC) \
-         $(LIBEMQTTINC)
- 
+         $(CHIBIOS)/os/various $(CHIBIOS)/os/hal/lib/streams
+
 #
 # Project, sources and paths
 ##############################################################################
@@ -239,7 +240,17 @@ OOCD_FLASH += -c "verify_image $(TARGET).elf"
 OOCD_FLASH += -c "reset run"
 OOCD_FLASH += -c shutdown
 
-	
+
+#
+# End of openocd
+##############################################################################
+
+RULESPATH = $(CHIBIOS)/os/common/ports/ARMCMx/compilers/GCC
+include $(RULESPATH)/rules.mk
+
+doc: doxygen
+	doxygen doxygen.cfg
+
 flash: $(TARGET).elf
 	$(OPENOCD) $(OOCD_INIT) $(OOCD_FLASH)
 
@@ -251,13 +262,4 @@ killgdbserver:
 	# @echo "shutdown" | telnet localhost 4444
 	killall openocd
 
-.PHONY: flash gdbserver killgdbserver
-#
-# End of openocd
-##############################################################################
-
-RULESPATH = $(CHIBIOS)/os/common/ports/ARMCMx/compilers/GCC
-include $(RULESPATH)/rules.mk
-
-doxygen: doxygen
-	doxygen doxygen.cfg
+.PHONY: flash gdbserver killgdbserver doc

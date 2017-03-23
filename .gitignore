@@ -212,3 +212,12 @@ $RECYCLE.BIN/
 *.lnk
 
 # End of https://www.gitignore.io/api/c,c++,sublimetext,eclipse,macos,windows,assembler
+
+*.aux
+*.log
+*.fdb_latexmk
+*.fls
+*.list
+*.lst
+*.bin
+*.dmp
