@@ -102,6 +102,10 @@ include $(CHIBIOS)/os/rt/ports/ARMCMx/compilers/GCC/mk/port_v7m.mk
 # Other files (optional).
 include $(CHIBIOS)/test/rt/test.mk
 
+# User source include
+UTELEMETRY = utelemetry
+include $(UTELEMETRY)/utelemetry.mk
+
 
 # Define linker script file here
 LDSCRIPT= $(STARTUPLD)/STM32F303xC.ld
@@ -119,6 +123,7 @@ CSRC = $(STARTUPSRC) \
        $(CHIBIOS)/os/hal/lib/streams/chprintf.c \
        $(CHIBIOS)/os/hal/lib/streams/memstreams.c \
        $(CHIBIOS)/os/various/shell.c \
+       $(UTELEMETRYSRC) \
        usbcfg.c \
        usbcdc.c \
        util.c \
@@ -153,7 +158,8 @@ ASMSRC = $(STARTUPASM) $(PORTASM) $(OSALASM)
 
 INCDIR = $(STARTUPINC) $(KERNINC) $(PORTINC) $(OSALINC) \
          $(HALINC) $(PLATFORMINC) $(BOARDINC) $(TESTINC) \
-         $(CHIBIOS)/os/various $(CHIBIOS)/os/hal/lib/streams
+         $(CHIBIOS)/os/various $(CHIBIOS)/os/hal/lib/streams \
+       	 $(UTELEMETRYINC)
 
 #
 # Project, sources and paths

@@ -1,44 +1,59 @@
-/*
-   SKATEMATE - Copyright (C) 2017 FHNW Project 4 Team 2
- */
-
 /**
- * @file       main.c
- * @brief      Main routine and LED control
+ * @file       utelemetry.h
+ * @brief      Micro telemetry implementation for C
  * @details    
  * @author     Noah Huetter (noahhuetter@gmail.com)
- * @date       23 March 2017
+ * @date       24 March 2017
  * 
  *
- * @addtogroup MAIN
- * @brief main routine and UX
+ * @addtogroup UTELEMETRY
  * @{
  */
+#include <stdint.h>
+#include <stdbool.h>
 
-#include "ch.h"
-#include "hal.h"
+/*===========================================================================*/
+/* Datatypes                                                                 */
+/*===========================================================================*/
+/**
+ * utlm data types
+ */
+typedef enum 
+{
+	utlm_uint8 = 0,
+	utlm_int8 = 1,
+	utlm_uint16 = 2,
+	utlm_int16 = 3,
+	utlm_uint32 = 4,
+	utlm_int32 = 5,
+	utlm_uint64 = 6,
+	utlm_int64 = 7,
+	utlm_float = 8,
+	utlm_double = 9
+} utlmDatatype_t;
 
-#include "defs.h"
-// #include "chprintf.h"
-#include "utelemetry.h"
-
-#include "usbcdc.h"
-#include "usbcfg.h"
+/**
+ * Measurement setting typedef
+ */
+typedef struct 
+{
+	uint16_t mid;
+	const char* name;
+	const char* unit;
+	utlmDatatype_t xtype;
+	utlmDatatype_t ytype;
+} utlmMeasurement_t;
 
 /*===========================================================================*/
 /* settings                                                                */
 /*===========================================================================*/
+#define UTLM_MAJOR_VERSION 0
+#define UTLM_MINOR_VERSION 1
 
 /*===========================================================================*/
 /* private data                                                              */
 /*===========================================================================*/
-uint8_t ydata[] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10};
-uint8_t xdata[] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10};
 
-
-/*===========================================================================*/
-/* prototypes                                                                */
-/*===========================================================================*/
 
 /*===========================================================================*/
 /* Module static functions.                                                  */
@@ -51,46 +66,7 @@ uint8_t xdata[] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10};
 /*===========================================================================*/
 /* Module public functions.                                                  */
 /*===========================================================================*/
-/*
- * Application entry point.
- */
-int main(void) 
-{
-  /*
-  * System initializations.
-  */
-  halInit();
-  chSysInit();
-
-  /**
-  * User init
-  */
-  usbcdcInit();
-
-  /*
-   * Shell manager initialization.
-   */
-  // shellInit();
-
-  palSetPadMode(GPIOE, 14, PAL_MODE_OUTPUT_PUSHPULL);
-  palSetPad(GPIOE,14);
-
-  /**
-   * Idle thread
-   */
-  chRegSetThreadName(DEFS_THD_IDLE_NAME);
-
-  // wait 10sec
-  chThdSleepMilliseconds(10000);
-  utlmEnable(true);
-
-  while (true) 
-  {
-    chThdSleepMilliseconds(1000);
-    utlmSend(0, 10, xdata, ydata);
-    palTogglePad(GPIOE,14);
-    // usbcdcHandleShell();
-  }
-}
+void utlmEnable(bool en);
+void utlmSend(uint16_t mid, uint16_t num, void* xdata, void* ydata);
 
 /** @} */

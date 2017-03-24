@@ -188,10 +188,6 @@ void usbcdcInit(void) {
   usbStart(serusbcfg.usbp, &usbcfg);
   usbConnectBus(serusbcfg.usbp);
   
-  /*
-   * Shell manager initialization.
-   */
-  shellInit();
 }
 
 /** @} */
