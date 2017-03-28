@@ -30,7 +30,8 @@
  */
 static const utlmMeasurement_t utlmMeasurements[] = 
 {
-  {0, "Voltage", "Volt", utlm_uint8, utlm_uint8}
+  {0, "Voltage", "Volt", utlm_uint8, utlm_uint8},
+  {1, "Current", "Amp", utlm_uint64, utlm_float}
 };
 static const int mNumMeasurements = sizeof(utlmMeasurements) / sizeof(utlmMeasurement_t);
 
@@ -97,7 +98,7 @@ void utlmEnable(bool en)
     // send start packet
     sendStart();
     // send declarations
-    for(; ctr < mNumMeasurements; ctr++)
+    for(ctr = 0; ctr < mNumMeasurements; ctr++)
     {
       sendDeclaration(ctr);
     }

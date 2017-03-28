@@ -18,6 +18,8 @@
 #include "ch.h"
 #include "hal.h"
 
+#include "shell.h"
+
 #include "defs.h"
 // #include "chprintf.h"
 #include "utelemetry.h"
@@ -56,6 +58,10 @@ uint8_t xdata[] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10};
  */
 int main(void) 
 {
+  static int i;
+  static uint64_t xda=0;
+  static float yda;
+
   /*
   * System initializations.
   */
@@ -88,7 +94,19 @@ int main(void)
   {
     chThdSleepMilliseconds(1000);
     utlmSend(0, 10, xdata, ydata);
+    for(i = 0; i < 10; i ++)
+    {
+      xdata[i] = xdata[i] + 10;
+    }
+    
+    xda++;
+    yda = xda*xda;
+    utlmSend(1, 1, &xda, &yda);
+
+
     palTogglePad(GPIOE,14);
+
+
     // usbcdcHandleShell();
   }
 }
