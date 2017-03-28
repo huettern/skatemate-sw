@@ -100,7 +100,7 @@ int main(void)
     }
     
     xda++;
-    yda = xda*xda;
+    yda = 1.0;
     utlmSend(1, 1, &xda, &yda);
 
 
