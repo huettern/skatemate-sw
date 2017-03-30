@@ -102,6 +102,10 @@ include $(CHIBIOS)/os/rt/ports/ARMCMx/compilers/GCC/mk/port_v7m.mk
 # Other files (optional).
 include $(CHIBIOS)/test/rt/test.mk
 
+# CMSIS library include
+CMSIS = lib/CMSIS
+include $(CMSIS)/cmsis.mk
+
 # User source include
 UTELEMETRY = utelemetry
 include $(UTELEMETRY)/utelemetry.mk
@@ -124,6 +128,7 @@ CSRC = $(STARTUPSRC) \
        $(CHIBIOS)/os/hal/lib/streams/memstreams.c \
        $(CHIBIOS)/os/various/shell.c \
        $(UTELEMETRYSRC) \
+       $(CMSISSRC) \
        usbcfg.c \
        usbcdc.c \
        util.c \
@@ -159,7 +164,7 @@ ASMSRC = $(STARTUPASM) $(PORTASM) $(OSALASM)
 INCDIR = $(STARTUPINC) $(KERNINC) $(PORTINC) $(OSALINC) \
          $(HALINC) $(PLATFORMINC) $(BOARDINC) $(TESTINC) \
          $(CHIBIOS)/os/various $(CHIBIOS)/os/hal/lib/streams \
-       	 $(UTELEMETRYINC)
+       	 $(UTELEMETRYINC) $(CMSISINC)
 
 #
 # Project, sources and paths
@@ -209,7 +214,12 @@ CPPWARN = -Wall -Wextra -Wundef
 #
 
 # List all user C define here, like -D_DEBUG=1
-UDEFS =-DCHPRINTF_USE_FLOAT=1
+UDEFS =-DCHPRINTF_USE_FLOAT=1 
+
+# For CMSIS Library and stm32f303xe device
+UDEFS +=-DARM_MATH_CM4 -D__FPU_PRESENT=1  \
+		-D__CM4_REV=0x0001 -D__MPU_PRESENT=1 -D__NVIC_PRIO_BITS=4 \
+		-D__Vendor_SysTickConfig=0
 
 # Define ASM defines here
 UADEFS =

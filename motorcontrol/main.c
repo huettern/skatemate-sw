@@ -14,6 +14,7 @@
  * @brief main routine and UX
  * @{
  */
+// #include <core_cm4_simd.h>
 
 #include "ch.h"
 #include "hal.h"
@@ -26,6 +27,8 @@
 
 #include "usbcdc.h"
 #include "usbcfg.h"
+
+// #include "core_cm4_simd.h"
 
 /*===========================================================================*/
 /* settings                                                                */
@@ -62,6 +65,8 @@ int main(void)
   static uint64_t xda=0;
   static float yda;
 
+  uint32_t op1,op2,res;
+
   /*
   * System initializations.
   */
@@ -85,6 +90,10 @@ int main(void)
    * Idle thread
    */
   chRegSetThreadName(DEFS_THD_IDLE_NAME);
+
+  op1 = 10;
+  op2 = 20;
+  res = __UADD8(op1,op2);
 
   // wait 10sec
   chThdSleepMilliseconds(10000);
