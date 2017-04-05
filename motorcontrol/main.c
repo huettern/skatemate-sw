@@ -24,6 +24,7 @@
 #include "defs.h"
 // #include "chprintf.h"
 #include "utelemetry.h"
+#include "drv8301.h"
 
 #include "usbcdc.h"
 #include "usbcfg.h"
@@ -98,28 +99,35 @@ int main(void)
   res = __UADD8(op1,op2);
 
   // wait 10sec
-  
+  shellInit();
+  drvInit();
+  while (true) 
+  {
+    chThdSleepMilliseconds(10);
+    usbcdcHandleShell();
+    palTogglePad(GPIOE,14);
+  }
   
   
   // CMSIS benchmark
-  systime_t ticks, pidtime, sintime;
-  arm_pid_instance_f32 pid;
-  float32_t a, b;
-  arm_pid_init_f32(&pid, 1);
-  while(true)
-  {
-    ticks = chVTGetSystemTimeX();
-    for(op1 = 0; op1 < 1000; op1++) arm_pid_f32(&pid,10.0f);
-    pidtime = chVTGetSystemTimeX();
-    for(op1 = 0; op1 < 1000; op1++) arm_sin_cos_f32(29.8, &a, &b);
-    sintime = chVTGetSystemTimeX();
+  // systime_t ticks, pidtime, sintime;
+  // arm_pid_instance_f32 pid;
+  // float32_t a, b;
+  // arm_pid_init_f32(&pid, 1);
+  // while(true)
+  // {
+  //   ticks = chVTGetSystemTimeX();
+  //   for(op1 = 0; op1 < 1000; op1++) arm_pid_f32(&pid,10.0f);
+  //   pidtime = chVTGetSystemTimeX();
+  //   for(op1 = 0; op1 < 1000; op1++) arm_sin_cos_f32(29.8, &a, &b);
+  //   sintime = chVTGetSystemTimeX();
 
 
-    chprintf(bssusb, "PID time: %fus \r\n", (float)(pidtime-ticks)/CH_CFG_ST_FREQUENCY*1000);
-    chprintf(bssusb, "SINCOS time: %fus \r\n", (float)(sintime-pidtime)/CH_CFG_ST_FREQUENCY*1000);
+  //   chprintf(bssusb, "PID time: %fus \r\n", (float)(pidtime-ticks)/CH_CFG_ST_FREQUENCY*1000);
+  //   chprintf(bssusb, "SINCOS time: %fus \r\n", (float)(sintime-pidtime)/CH_CFG_ST_FREQUENCY*1000);
 
-    chThdSleepMilliseconds(2000);
-  }
+  //   chThdSleepMilliseconds(2000);
+  // }
 
   
   // chThdSleepMilliseconds(10000);

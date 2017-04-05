@@ -26,6 +26,7 @@
 #include "shell.h"
 #include "defs.h"
 #include "util.h"
+#include "drv8301.h"
 
 #include "chprintf.h"
 
@@ -116,7 +117,7 @@ static void cmd_threads(BaseSequentialStream *chp, int argc, char *argv[]) {
     chprintf(chp, "Usage: threads\r\n");
     return;
   }
-  chprintf(chp, "    addr    stack prio   state    time      wa_size     free name\r\n");
+  chprintf(chp, "    addr    stack prio     state     time     wa_size     free name\r\n");
   tp = chRegFirstThread();
   do {
     chprintf(chp, "%08lx %08lx %4lu %9s %8lu %11lu %8lu %s\r\n",
@@ -133,14 +134,20 @@ static void cmd_threads(BaseSequentialStream *chp, int argc, char *argv[]) {
   chprintf(chp, "Overall CPU usge is %.1f%%\r\n", (float)time/(float)idletime*100.0);
   
 }
-
-
+static void cmd_drv(BaseSequentialStream *chp, int argc, char *argv[])
+{
+  (void)chp;
+  (void)argc;
+  (void)argv;
+  drvDumpStatus();
+}
 /**
  * List of shell commands
  */
 static const ShellCommand commands[] = {
 		{"mem", cmd_mem},
-		{"threads", cmd_threads},
+    {"threads", cmd_threads},
+    {"drv", cmd_drv},
 		{NULL, NULL}
 };
 

@@ -109,6 +109,8 @@ include $(CMSIS)/cmsis.mk
 # User source include
 UTELEMETRY = utelemetry
 include $(UTELEMETRY)/utelemetry.mk
+MC = mc
+include $(MC)/mc.mk
 
 
 # Define linker script file here
@@ -129,6 +131,7 @@ CSRC = $(STARTUPSRC) \
        $(CHIBIOS)/os/various/shell.c \
        $(UTELEMETRYSRC) \
        $(CMSISSRC) \
+       $(MCSRC) \
        usbcfg.c \
        usbcdc.c \
        util.c \
@@ -164,7 +167,7 @@ ASMSRC = $(STARTUPASM) $(PORTASM) $(OSALASM)
 INCDIR = $(STARTUPINC) $(KERNINC) $(PORTINC) $(OSALINC) \
          $(HALINC) $(PLATFORMINC) $(BOARDINC) $(TESTINC) \
          $(CHIBIOS)/os/various $(CHIBIOS)/os/hal/lib/streams \
-       	 $(UTELEMETRYINC) $(CMSISINC)
+       	 $(UTELEMETRYINC) $(CMSISINC) $(MCINC)
 
 #
 # Project, sources and paths
