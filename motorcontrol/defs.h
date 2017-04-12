@@ -24,6 +24,7 @@
 #define DEFS_THD_IDLE_NAME 			"main"
 #define DEFS_THD_SHELL_NAME 			"shell"
 
+#define SYSTEM_CORE_CLOCK	72000000 //Hz
 
 /*===========================================================================*/
 /* Test defines. Always uncomment for production                             */

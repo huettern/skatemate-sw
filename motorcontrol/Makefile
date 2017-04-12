@@ -109,8 +109,12 @@ include $(CMSIS)/cmsis.mk
 # User source include
 UTELEMETRY = utelemetry
 include $(UTELEMETRY)/utelemetry.mk
+
 MC = mc
 include $(MC)/mc.mk
+
+F3STDPERIPH = lib/STM32F30x_StdPeriph_Driver
+include $(F3STDPERIPH)/stm32f3_stdperiph.mk
 
 
 # Define linker script file here
@@ -132,6 +136,7 @@ CSRC = $(STARTUPSRC) \
        $(UTELEMETRYSRC) \
        $(CMSISSRC) \
        $(MCSRC) \
+       $(STM32F30xSRC) \
        usbcfg.c \
        usbcdc.c \
        util.c \
@@ -167,7 +172,8 @@ ASMSRC = $(STARTUPASM) $(PORTASM) $(OSALASM)
 INCDIR = $(STARTUPINC) $(KERNINC) $(PORTINC) $(OSALINC) \
          $(HALINC) $(PLATFORMINC) $(BOARDINC) $(TESTINC) \
          $(CHIBIOS)/os/various $(CHIBIOS)/os/hal/lib/streams \
-       	 $(UTELEMETRYINC) $(CMSISINC) $(MCINC)
+       	 $(UTELEMETRYINC) $(CMSISINC) $(MCINC) $(STM32F30xINC) \
+       	 $(CHIBIOS)/os/ext/ST/STM32F3xx
 
 #
 # Project, sources and paths
