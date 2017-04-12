@@ -24,14 +24,14 @@
 /*===========================================================================*/
 
 // SPI registers
-#define SPI_READ            0x8000
-#define SPI_WRITE           0x0000
+#define DRV_SPI_READ            0x8000
+#define DRV_SPI_WRITE           0x0000
 
-#define SPI_ADR(x)          ((x<<11)&0x7100)
-#define SPI_SR1             SPI_ADR(0)
-#define SPI_SR2             SPI_ADR(1)
-#define SPI_CTRL1           SPI_ADR(2)
-#define SPI_CTRL2           SPI_ADR(3)
+#define DRV_SPI_ADR(x)          ((x<<11)&0x7800)
+#define DRV_SPI_SR1             DRV_SPI_ADR(0)
+#define DRV_SPI_SR2             DRV_SPI_ADR(1)
+#define DRV_SPI_CTRL1           DRV_SPI_ADR(2)
+#define DRV_SPI_CTRL2           DRV_SPI_ADR(3)
 
 // SR1 bits
 #define SR1_FAULT           0x0400
@@ -86,20 +86,20 @@ static const SPIConfig hs_spicfg = {
   NULL, //Callback
   DRV_SPI_NCS_PORT,
   DRV_SPI_NCS_PIN,
-  SPI_CR1_BR_0, // fpclk/4 baud rate
+  SPI_CR1_BR_0 | SPI_CR1_BR_2 | SPI_CR1_BR_1 | SPI_CR1_CPHA,// 
   SPI_CR2_DS_2 | SPI_CR2_DS_1 | SPI_CR2_DS_0 // 8bit data size
 };
 
-/*
- * Low speed SPI configuration (140.625kHz, CPHA=0, CPOL=0, MSb first).
- */
-static const SPIConfig ls_spicfg = {
-  NULL, //Callback
-  DRV_SPI_NCS_PORT,
-  DRV_SPI_NCS_PIN,
-  SPI_CR1_BR_2 | SPI_CR1_BR_1,
-  SPI_CR2_DS_2 | SPI_CR2_DS_1 | SPI_CR2_DS_0 // 8bit data size
-};
+// /*
+//  * Low speed SPI configuration (140.625kHz, CPHA=0, CPOL=0, MSb first).
+//  */
+// static const SPIConfig ls_spicfg = {
+//   NULL, //Callback
+//   DRV_SPI_NCS_PORT,
+//   DRV_SPI_NCS_PIN,
+//   SPI_CR1_BR_2 | SPI_CR1_BR_1,
+//   SPI_CR2_DS_2 | SPI_CR2_DS_1 | SPI_CR2_DS_0 // 8bit data size
+// };
 
 
 /*===========================================================================*/
@@ -181,11 +181,13 @@ void drvInit(void)
   drvGateEnable();
   chThdSleepMilliseconds(1); // Let the DRV power up
 
-  writePacket(
+  // Control register 1
+  writePacket( DRV_SPI_CTRL1 |
     CTRL1_GATE_CURRENT_1_7_A | CTRL1_GATE_RESET_NORMAL | 
     CTRL1_PWM_MODE_6_INPUT | CTRL1_OCP_MODE_CURRENT_LIMIT | CTRL1_OC_ADJ_SET(12)
     );
-  writePacket(
+  // Control register 2
+  writePacket( DRV_SPI_CTRL2 |
     CTRL2_OCTW_MODE_BOTH | CTRL2_GAIN_10 | 
     CTRL2_DC_CAL_CH1_NORMAL | CTRL2_DC_CAL_CH2_NORMAL | CTRL2_OC_TOFF_CYCLE
   );
@@ -199,10 +201,10 @@ void drvDumpStatus(void)
 {
   uint16_t sr2, ctl1, ctl2;
   
-  // Get all registers
-  sr2 = readPacket(SPI_SR2);
-  ctl1 = readPacket(SPI_CTRL1);
-  ctl2 = readPacket(SPI_CTRL2);
+  // Get all registers and mask out the data bits
+  sr2 = readPacket(DRV_SPI_SR2) & 0x07ff;
+  ctl1 = readPacket(DRV_SPI_CTRL1) & 0x0700;
+  ctl2 = readPacket(DRV_SPI_CTRL2) & 0x0700;
 
   DBG ("SR1      %04x\r\n\
 SR2      %04x\r\n\
@@ -228,6 +230,9 @@ PWRGD    %d\r\n",
  */
 static void writePacket(uint16_t data)
 {
+  uint16_t rx[2];
+  rx[0] = 0;
+  rx[1] = 0;
   mtxbuf[0] = (data>>8) & 0x00ff;
   mtxbuf[1] = data & 0x00ff;
   mtxbuf[2] = 0;
@@ -235,13 +240,21 @@ static void writePacket(uint16_t data)
 
   spiAcquireBus(&DRV_SPI_DEVICE);
   spiStart(&DRV_SPI_DEVICE, &hs_spicfg);
+
   spiSelect(&DRV_SPI_DEVICE);
-  spiExchange(&DRV_SPI_DEVICE, 4, mtxbuf, mrxbuf);
+  spiExchange(&DRV_SPI_DEVICE, 2, mtxbuf, rx);
+  
+  // After one packet, the select line must be toggled
   spiUnselect(&DRV_SPI_DEVICE);
+  spiSelect(&DRV_SPI_DEVICE);
+
+  spiExchange(&DRV_SPI_DEVICE, 2, &mtxbuf[2], rx);
+  spiUnselect(&DRV_SPI_DEVICE);
+
   spiReleaseBus(&DRV_SPI_DEVICE);
   // After a write the DRV always returns the SR1 value
   // Data is MSB first
-  mSR1Value = mrxbuf[3] | ((mrxbuf[2]<<8)&0xff00);
+  mSR1Value = mrxbuf[1] | ((mrxbuf[0]<<8)&0xff00);
 }
 /**
  * @brief      Read a register
@@ -252,7 +265,10 @@ static void writePacket(uint16_t data)
  */
 static uint16_t readPacket(uint16_t data)
 {
-  data |= SPI_READ;
+  uint16_t rx[2];
+  rx[0] = 0;
+  rx[1] = 0;
+  data |= DRV_SPI_READ;
   mtxbuf[0] = ((data>>8) & 0x00ff);
   mtxbuf[1] = data & 0x00ff;
   mtxbuf[2] = 0;
@@ -260,12 +276,21 @@ static uint16_t readPacket(uint16_t data)
 
   spiAcquireBus(&DRV_SPI_DEVICE);
   spiStart(&DRV_SPI_DEVICE, &hs_spicfg);
+
   spiSelect(&DRV_SPI_DEVICE);
-  spiExchange(&DRV_SPI_DEVICE, 4, mtxbuf, mrxbuf);
+  spiExchange(&DRV_SPI_DEVICE, 2, mtxbuf, rx);
+  
+  // After one packet, the select line must be toggled
+  spiUnselect(&DRV_SPI_DEVICE);
+  spiSelect(&DRV_SPI_DEVICE);
+
+  spiExchange(&DRV_SPI_DEVICE, 2, &mtxbuf[2], rx);
+  spiUnselect(&DRV_SPI_DEVICE);
+
   spiUnselect(&DRV_SPI_DEVICE);
   spiReleaseBus(&DRV_SPI_DEVICE);
   // Data is MSB first
-  return (mrxbuf[3] | ((mrxbuf[2]<<8)&0xff00));
+  return (rx[1] | ((rx[0]<<8)&0xff00));
 }
 
 

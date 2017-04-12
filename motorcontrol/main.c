@@ -103,7 +103,8 @@ int main(void)
   drvInit();
   while (true) 
   {
-    chThdSleepMilliseconds(10);
+    chThdSleepMilliseconds(1);
+    // drvDumpStatus();
     usbcdcHandleShell();
     palTogglePad(GPIOE,14);
   }
