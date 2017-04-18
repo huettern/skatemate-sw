@@ -22,6 +22,7 @@
 #include <string.h>
 #include <ctype.h>
 #include <stdlib.h>
+#include <math.h>
 
 /*===========================================================================*/
 /* Module public functions.                                                  */
@@ -126,6 +127,35 @@ size_t getThdWaSize(thread_t *tp)
   return 0;
 }
 
+/**
+ * @brief      fast atan2 calculation
+ * @note       See http://www.dspguru.com/dsp/tricks/fixed-point-atan2-with-self-normalization
+ *
+ * @param[in]  y     y
+ * @param[in]  x     x
+ *
+ * @return     atan2(y,x)
+ */
+float utilFastAtan2(float y, float x) {
+  float abs_y = fabsf(y) + 1e-10; // kludge to prevent 0/0 condition
+  float angle, r, rsq;
+
+  if (x >= 0) {
+    r = (x - abs_y) / (x + abs_y);
+    rsq = r * r;
+    angle = ((0.1963 * rsq) - 0.9817) * r + (PI / 4.0);
+  } else {
+    r = (x + abs_y) / (abs_y - x);
+    rsq = r * r;
+    angle = ((0.1963 * rsq) - 0.9817) * r + (3.0 * PI / 4.0);
+  }
+
+  if (y < 0) {
+    return(-angle);
+  } else {
+    return(angle);
+  }
+}
 
 
 /** @} */

@@ -30,6 +30,7 @@ char * rtrim(char * str, char trimchar);
 bool lockMtx(mutex_t* mtx, uint32_t t);
 size_t getThdWaSize(thread_t *tp);
 
+float utilFastAtan2(float y, float x);
 
 
 

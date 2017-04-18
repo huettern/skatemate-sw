@@ -61,6 +61,29 @@
  */
 #define FOC_THREAD_INTERVAL 1000 // us
 
+/**
+ * Motor default parameters
+ */
+#define FOC_MOTOR_DEFAULT_PSI 0.003
+#define FOC_MOTOR_DEFAULT_P   7
+#define FOC_MOTOR_DEFAULT_LS  10e-6
+#define FOC_MOTOR_DEFAULT_RS  15e-3
+#define FOC_MOTOR_DEFAULT_J   150e-6
+
+/**
+ * FOC defautl parameters
+ */
+#define FOC_PARAM_DEFAULT_OBS_GAIN    100e6
+#define FOC_PARAM_DEFAULT_CURR_D_KP   0.097
+#define FOC_PARAM_DEFAULT_CURR_D_KI   0
+#define FOC_PARAM_DEFAULT_CURR_D_KD   0
+#define FOC_PARAM_DEFAULT_CURR_Q_KP   0.097
+#define FOC_PARAM_DEFAULT_CURR_Q_KI   0
+#define FOC_PARAM_DEFAULT_CURR_Q_KD   0
+#define FOC_PARAM_DEFAULT_SPEED_KP    0.1
+#define FOC_PARAM_DEFAULT_SPEED_KI    0
+#define FOC_PARAM_DEFAULT_SPEED_KD    0
+
 /*===========================================================================*/
 /* macros                                                                    */
 /*===========================================================================*/
@@ -94,9 +117,19 @@
 static THD_WORKING_AREA(mcfWA, DEFS_THD_MCFOC_WA_SIZE);
 static THD_FUNCTION(mcfocThread, arg);
 
+static mcfMotorParameter_t mMotParms;
+static mcfFOCParameter_t mFOCParms;
+
+/**
+ * @brief      Observer working set
+ */
+static mcfObs_t mObs;
+
 /*===========================================================================*/
 /* prototypes                                                                */
 /*===========================================================================*/
+static void dataInit();
+
 static void svm (float* a, float* b, uint16_t* da, uint16_t* db, uint16_t* dc);
 
 static void clark (float* va, float* vb, float* vc, float* a, float* b);
@@ -104,6 +137,7 @@ static void park (float* a, float* b, float* theta, float* d, float* q );
 static void invclark (float* a, float* b, float* va, float* vb, float* vc);
 static void invpark (float* d, float* q, float* theta, float* a, float* b);
 
+static void runObserver(float *ua, float *ub, float *ia, float *ib, float *dt);
 
 /*===========================================================================*/
 /* Module public functions.                                                  */
@@ -119,6 +153,7 @@ void mcfInit(void)
   ADC_CommonInitTypeDef adc_cis;
   ADC_InitTypeDef adc_is;
   DMA_InitTypeDef dma_is;
+  dataInit();
 
   // TIM1 clock enable
   RCC_APB2PeriphClockCmd(RCC_APB2Periph_TIM1, ENABLE);
@@ -261,6 +296,20 @@ static THD_FUNCTION(mcfocThread, arg) {
   (void)arg;
   chRegSetThreadName(DEFS_THD_MCFOC_NAME);
 
+  // while(true)
+  // {
+  //   // transform
+    
+  //   // run speed controller
+    
+  //   // run current controller
+    
+  //   // inverse transform
+    
+  //   // calculate duties
+    
+  //   // set output
+  // }
 
   /**
    * @brief      SVM test
@@ -287,6 +336,28 @@ static THD_FUNCTION(mcfocThread, arg) {
     t += FOC_THREAD_INTERVAL;
     freq += 0.002;
   }
+}
+/**
+ * @brief      Initializes the static data with default values
+ */
+static void dataInit()
+{
+  mMotParms.psi = FOC_MOTOR_DEFAULT_PSI;
+  mMotParms.p = FOC_MOTOR_DEFAULT_P;
+  mMotParms.Ls = FOC_MOTOR_DEFAULT_LS;
+  mMotParms.Rs = FOC_MOTOR_DEFAULT_RS;
+  mMotParms.J = FOC_MOTOR_DEFAULT_J;
+
+  mFOCParms.obsGain = FOC_PARAM_DEFAULT_OBS_GAIN;
+  mFOCParms.curr_d_kp = FOC_PARAM_DEFAULT_CURR_D_KP;
+  mFOCParms.curr_d_ki = FOC_PARAM_DEFAULT_CURR_D_KI;
+  mFOCParms.curr_d_kd = FOC_PARAM_DEFAULT_CURR_D_KD;
+  mFOCParms.curr_q_kp = FOC_PARAM_DEFAULT_CURR_Q_KP;
+  mFOCParms.curr_q_ki = FOC_PARAM_DEFAULT_CURR_Q_KI;
+  mFOCParms.curr_q_kd = FOC_PARAM_DEFAULT_CURR_Q_KD;
+  mFOCParms.speed_kp = FOC_PARAM_DEFAULT_SPEED_KP;
+  mFOCParms.speed_ki = FOC_PARAM_DEFAULT_SPEED_KI;
+  mFOCParms.speed_kd = FOC_PARAM_DEFAULT_SPEED_KD;
 }
 /**
  * @brief      Calculates the duty cycles based on the input vectors in the
@@ -472,6 +543,39 @@ static void invpark (float* d, float* q, float* theta, float* a, float* b)
   cos = arm_cos_f32(*theta);
   (*a) = (*d)*cos - (*q)*sin;
   (*b) = (*q)*cos + (*d)*sin;
+}
+/**
+ * @brief      Run a non linear observer iteration
+ * @note       Based on IEEE 2010 Position Estimator using a Nonlinear Observer
+ *
+ * @param      ua    in: measured v alpha
+ * @param      ub    in: measured v beta
+ * @param      ia    in: measured i alpha
+ * @param      ib    in: measured i beta
+ * @param      dt    in: time delta since last call
+ */
+static void runObserver(float *ua, float *ub, float *ia, float *ib, float *dt)
+{
+  float pos_error;
+  float xp[2];
+
+  mObs.eta[0] = mObs.x[0] - mMotParms.Ls*(*ia);
+  mObs.eta[1] = mObs.x[1] - mMotParms.Ls*(*ib);
+
+  mObs.y[0] = -mMotParms.Rs*(*ia) + (*ua);
+  mObs.y[1] = -mMotParms.Rs*(*ib) + (*ub);
+
+  pos_error =  mMotParms.psi*mMotParms.psi - 
+    (mObs.eta[0]*mObs.eta[0] + mObs.eta[1]*mObs.eta[1]);
+
+  xp[0] = mObs.y[0] + 0.5f*mFOCParms.obsGain*mObs.eta[0]*pos_error;
+  xp[1] = mObs.y[1] + 0.5f*mFOCParms.obsGain*mObs.eta[1]*pos_error;
+        
+  mObs.x[0] += xp[0]*(*dt);
+  mObs.x[1] += xp[1]*(*dt);
+
+  mObs.theta = utilFastAtan2((mObs.x[1] - mMotParms.Ls*(*ib)), 
+    (mObs.x[0] - mMotParms.Ls*(*ia) ));
 }
 
 /** @} */
