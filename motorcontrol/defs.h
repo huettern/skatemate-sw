@@ -23,9 +23,11 @@
 
 #define DEFS_THD_IDLE_WA_SIZE 			0x500
 #define DEFS_THD_SHELL_WA_SIZE 			2048
+#define DEFS_THD_MCFOC_WA_SIZE			1024
 
-#define DEFS_THD_IDLE_NAME 			"main"
+#define DEFS_THD_IDLE_NAME 				"main"
 #define DEFS_THD_SHELL_NAME 			"shell"
+#define DEFS_THD_MCFOC_NAME 			"mcfoc"
 
 #define SYSTEM_CORE_CLOCK	72000000 //Hz
 

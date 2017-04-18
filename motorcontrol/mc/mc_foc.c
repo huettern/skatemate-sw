@@ -31,6 +31,9 @@
 #include "ch.h"
 #include "hal.h"
 #include "defs.h"
+#include "util.h"
+
+#include "arm_math.h"
 
 #include "stm32f30x_conf.h"
 
@@ -53,8 +56,10 @@
  * middle of a Gate low output sequence for current and voltage sensing
  */
 #define FOC_TIM1_OC4_VALUE (SYSTEM_CORE_CLOCK / FOC_F_SW) - 1
-
-#define FOC_TIM_PERIOD SYSTEM_CORE_CLOCK / FOC_F_SW
+/**
+ * How fast the control thread should run
+ */
+#define FOC_THREAD_INTERVAL 1000 // us
 
 /*===========================================================================*/
 /* macros                                                                    */
@@ -75,13 +80,30 @@
     TIM1->CCR3 = duty3; \
     TIM1->CR1 &= ~TIM_CR1_UDIS;
 
+/**
+ * Period, the timer should run on. Calculated by Core clock and FOC_F_SW
+ */
+#define FOC_TIM_PERIOD SYSTEM_CORE_CLOCK / FOC_F_SW
+
 /*===========================================================================*/
 /* private data                                                              */
 /*===========================================================================*/
+/*
+ * Working area for the State machine thread
+ */
+static THD_WORKING_AREA(mcfWA, DEFS_THD_MCFOC_WA_SIZE);
+static THD_FUNCTION(mcfocThread, arg);
 
 /*===========================================================================*/
 /* prototypes                                                                */
 /*===========================================================================*/
+static void svm (float* a, float* b, uint16_t* da, uint16_t* db, uint16_t* dc);
+
+static void clark (float* va, float* vb, float* vc, float* a, float* b);
+static void park (float* a, float* b, float* theta, float* d, float* q );
+static void invclark (float* a, float* b, float* va, float* vb, float* vc);
+static void invpark (float* d, float* q, float* theta, float* a, float* b);
+
 
 /*===========================================================================*/
 /* Module public functions.                                                  */
@@ -210,7 +232,14 @@ void mcfInit(void)
    * Main output enable
    */
   TIM_CtrlPWMOutputs(TIM1, ENABLE);
+
+  /**
+   * Create thread
+   */
+  (void)chThdCreateStatic(mcfWA, sizeof(mcfWA), HIGHPRIO, mcfocThread, NULL);
 }
+
+
 
 /**
  * @brief      Sets the duty time of the three PWM outputs in raw timer ticks
@@ -228,5 +257,224 @@ void mcfSetDuty (uint16_t a, uint16_t b, uint16_t c)
 /*===========================================================================*/
 /* Module static functions.                                                  */
 /*===========================================================================*/
+static THD_FUNCTION(mcfocThread, arg) {
+  (void)arg;
+  chRegSetThreadName(DEFS_THD_MCFOC_NAME);
+
+
+  /**
+   * @brief      SVM test
+   *
+   * @param[in]  <unnamed>  { parameter_description }
+   */
+  float t = 0;
+  float freq = 100;
+  float alpha, beta, d, q, theta;
+  uint16_t da, db, dc;
+  d = 0;
+  q = 0.9;
+
+  while (true) {
+    theta = 2*PI*freq*(t/1000000);
+    invpark(&d, &q, &theta, &alpha, &beta);
+    svm(&alpha, &beta, &da, &db, &dc);
+    TIMER_UPDATE_DUTY(da, db, dc);
+    chThdSleepMicroseconds(FOC_THREAD_INTERVAL);
+    t += FOC_THREAD_INTERVAL;
+  }
+}
+/**
+ * @brief      Calculates the duty cycles based on the input vectors in the
+ * clark reference frame
+ *
+ * @param      a     in: clark alpha component
+ * @param      b     in: clark beta component
+ * @param      da    out: phase a duty cycle
+ * @param      db    out: phase b duty cycle
+ * @param      dc    out: phase c duty cycle
+ */
+static void svm (float* a, float* b, uint16_t* da, uint16_t* db, uint16_t* dc)
+{
+  uint8_t sector;
+  float ton1, ton2;
+
+  /**
+   * First, decide which sector we're in
+   */
+  if(*b >= 0.0f)
+  {
+    // top half
+    if(*a >= 0.0f)
+    {
+      // Quadrant I
+      if( *a < (*b * ONE_BY_SQRT_3) )
+        sector = 2;
+      else
+        sector = 1;
+    }
+    else
+    {
+      // Quadrant II
+      if( ( -(*a) ) > (*b * ONE_BY_SQRT_3) )
+        sector = 3;
+      else
+        sector = 2;
+    }
+  }
+  else
+  {
+    // bottom half
+    if(*a >= 0.0f)
+    {
+      // Quadrant IV
+      if( *a < ( (-*b) * ONE_BY_SQRT_3) )
+        sector = 5;
+      else
+        sector = 6;
+    }
+    else
+    {
+      // Quadrant III
+      if( *a < (*b * ONE_BY_SQRT_3) )
+        sector = 5;
+      else
+        sector = 4;
+    }
+  }
+
+  /**
+   * Now the sector dependant calculations
+   */
+  if(sector == 1)
+  {
+    // Vector on times
+    ton1 = (*a - ONE_BY_SQRT_3 * (*b) ) * FOC_TIM_PERIOD;
+    ton2 = (TWO_BY_SQRT_3 * (*b)) * FOC_TIM_PERIOD;
+    // PWM timings
+    *da = (uint16_t)( (FOC_TIM_PERIOD - ton1 - ton2) / 2);
+    *db = (uint16_t)(*da + ton1);
+    *dc = (uint16_t)(*db + ton2);
+    return;
+  }
+  if(sector == 2)
+  {
+    // Vector on times
+    ton1 = ((*a) + ONE_BY_SQRT_3 * (*b)) * FOC_TIM_PERIOD;
+    ton2 = (-(*a) + ONE_BY_SQRT_3 * (*b)) * FOC_TIM_PERIOD;
+    // PWM timings
+    *db = (uint16_t)((FOC_TIM_PERIOD - ton1 - ton2) / 2);
+    *da = (uint16_t)((*db) + ton2);
+    *dc = (uint16_t)((*da) + ton1);
+    return;
+  }
+  if(sector == 3)
+  {
+    // Vector on times
+    ton1 = (TWO_BY_SQRT_3 * (*b)) * FOC_TIM_PERIOD;
+    ton2 = (-(*a) - ONE_BY_SQRT_3 * (*b)) * FOC_TIM_PERIOD;
+    // PWM timings
+    *db = (uint16_t)((FOC_TIM_PERIOD - ton1 - ton2) / 2);
+    *dc = (uint16_t)((*db) + ton1);
+    *da = (uint16_t)((*dc) + ton2);
+    return;
+  }
+  if(sector == 4)
+  {
+    // Vector on times
+    ton1 = (-(*a) + ONE_BY_SQRT_3 * (*b)) * FOC_TIM_PERIOD;
+    ton2 = (-TWO_BY_SQRT_3 * (*b)) * FOC_TIM_PERIOD;
+    // PWM timings
+    *dc = (uint16_t)((FOC_TIM_PERIOD - ton1 - ton2) / 2);
+    *db = (uint16_t)((*dc) + ton2);
+    *da = (uint16_t)((*db) + ton1);
+    return;
+  }
+  if(sector == 5)
+  {
+    // Vector on times
+    ton1 = (-(*a) - ONE_BY_SQRT_3 * (*b)) * FOC_TIM_PERIOD;
+    ton2 = ((*a) - ONE_BY_SQRT_3 * (*b)) * FOC_TIM_PERIOD;
+    // PWM timings
+    *dc = (uint16_t)((FOC_TIM_PERIOD - ton1 - ton2) / 2);
+    *da = (uint16_t)(*dc + ton1);
+    *db = (uint16_t)(*da + ton2);
+    return;
+  }
+  if(sector == 6)
+  {
+    // Vector on times
+    ton1 = (-TWO_BY_SQRT_3 * (*b)) * FOC_TIM_PERIOD;
+    ton2 = ((*a) + ONE_BY_SQRT_3 * (*b)) * FOC_TIM_PERIOD;
+    // PWM timings
+    *da = (uint16_t)((FOC_TIM_PERIOD - ton1 - ton2) / 2);
+    *dc = (uint16_t)(*da + ton2);
+    *db = (uint16_t)(*dc + ton1);
+    return;
+  }
+}
+
+/**
+ * @brief      Forward clark transformation
+ *
+ * @param      va    in: a component
+ * @param      vb    in: b component
+ * @param      vc    in: c component
+ * @param      a     out: alpha component
+ * @param      b     out: beta component
+ */
+static void clark (float* va, float* vb, float* vc, float* a, float* b)
+{
+  *va = 2.0f / 3.0f * (*va - 0.5f*(*vb) - 0.5f*(*vc));
+  *vb = 2.0f / 3.0f * (SQRT_3_BY_2*(*vb) - SQRT_3_BY_2*(*vc));
+}
+/**
+ * @brief      Forward park transformation
+ *
+ * @param      a     in: alpha component
+ * @param      b     in: beta component
+ * @param      theta in: angle
+ * @param      d     out: d component
+ * @param      q     out: q component
+ */
+static void park (float* a, float* b, float* theta, float* d, float* q )
+{
+  float sin, cos;
+  sin = arm_sin_f32(*theta);
+  cos = arm_cos_f32(*theta);
+  (*d) =  (*a)*cos + (*b)*sin;
+  (*q) = -(*a)*sin + (*b)*cos;
+}
+/**
+ * @brief      Inverse clark transformation
+ *
+ * @param      a     in: alpha component
+ * @param      b     in: beta component
+ * @param      va    out: a component
+ * @param      vb    out: b component
+ * @param      vc    out: c component
+ */
+static void invclark (float* a, float* b, float* va, float* vb, float* vc)
+{
+  *va = *a;
+  *vb = 1.0f / 2.0f * (-(*a) + SQRT_3*(*b));
+  *vc = 1.0f / 2.0f * (-(*a) + SQRT_3*(*b));
+}
+/**
+ * @brief      Inverse park transformation
+ *
+ * @param      d     in: d component
+ * @param      q     in: q component
+ * @param      theta in: angle
+ * @param      a     out: alpha component
+ * @param      b     out: beta component
+ */
+static void invpark (float* d, float* q, float* theta, float* a, float* b)
+{
+  float sin, cos;
+  sin = arm_sin_f32(*theta);
+  cos = arm_cos_f32(*theta);
+  (*a) = (*d)*cos - (*q)*sin;
+  (*b) = (*q)*cos + (*d)*sin;
+}
 
 /** @} */
