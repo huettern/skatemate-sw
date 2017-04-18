@@ -275,9 +275,13 @@ static THD_FUNCTION(mcfocThread, arg) {
   q = 0.9;
 
   while (true) {
-    theta = 2*PI*freq*(t/1000000);
-    invpark(&d, &q, &theta, &alpha, &beta);
-    svm(&alpha, &beta, &da, &db, &dc);
+  palSetPad(GPIOE,14);
+    theta = 2*PI*freq*(t/1000000); //800ns
+  palTogglePad(GPIOE,14);
+    invpark(&d, &q, &theta, &alpha, &beta); // 5.5us
+  palTogglePad(GPIOE,14);
+    svm(&alpha, &beta, &da, &db, &dc); // 4.3us
+  palTogglePad(GPIOE,14);  
     TIMER_UPDATE_DUTY(da, db, dc);
     chThdSleepMicroseconds(FOC_THREAD_INTERVAL);
     t += FOC_THREAD_INTERVAL;
@@ -345,71 +349,63 @@ static void svm (float* a, float* b, uint16_t* da, uint16_t* db, uint16_t* dc)
   /**
    * Now the sector dependant calculations
    */
-  if(sector == 1)
+  // Switch-case is approx. 0.1us faster than if statements
+  switch(sector)
   {
-    // Vector on times
-    ton1 = (*a - ONE_BY_SQRT_3 * (*b) ) * FOC_TIM_PERIOD;
-    ton2 = (TWO_BY_SQRT_3 * (*b)) * FOC_TIM_PERIOD;
-    // PWM timings
-    *da = (uint16_t)( (FOC_TIM_PERIOD - ton1 - ton2) / 2);
-    *db = (uint16_t)(*da + ton1);
-    *dc = (uint16_t)(*db + ton2);
-    return;
-  }
-  if(sector == 2)
-  {
-    // Vector on times
-    ton1 = ((*a) + ONE_BY_SQRT_3 * (*b)) * FOC_TIM_PERIOD;
-    ton2 = (-(*a) + ONE_BY_SQRT_3 * (*b)) * FOC_TIM_PERIOD;
-    // PWM timings
-    *db = (uint16_t)((FOC_TIM_PERIOD - ton1 - ton2) / 2);
-    *da = (uint16_t)((*db) + ton2);
-    *dc = (uint16_t)((*da) + ton1);
-    return;
-  }
-  if(sector == 3)
-  {
-    // Vector on times
-    ton1 = (TWO_BY_SQRT_3 * (*b)) * FOC_TIM_PERIOD;
-    ton2 = (-(*a) - ONE_BY_SQRT_3 * (*b)) * FOC_TIM_PERIOD;
-    // PWM timings
-    *db = (uint16_t)((FOC_TIM_PERIOD - ton1 - ton2) / 2);
-    *dc = (uint16_t)((*db) + ton1);
-    *da = (uint16_t)((*dc) + ton2);
-    return;
-  }
-  if(sector == 4)
-  {
-    // Vector on times
-    ton1 = (-(*a) + ONE_BY_SQRT_3 * (*b)) * FOC_TIM_PERIOD;
-    ton2 = (-TWO_BY_SQRT_3 * (*b)) * FOC_TIM_PERIOD;
-    // PWM timings
-    *dc = (uint16_t)((FOC_TIM_PERIOD - ton1 - ton2) / 2);
-    *db = (uint16_t)((*dc) + ton2);
-    *da = (uint16_t)((*db) + ton1);
-    return;
-  }
-  if(sector == 5)
-  {
-    // Vector on times
-    ton1 = (-(*a) - ONE_BY_SQRT_3 * (*b)) * FOC_TIM_PERIOD;
-    ton2 = ((*a) - ONE_BY_SQRT_3 * (*b)) * FOC_TIM_PERIOD;
-    // PWM timings
-    *dc = (uint16_t)((FOC_TIM_PERIOD - ton1 - ton2) / 2);
-    *da = (uint16_t)(*dc + ton1);
-    *db = (uint16_t)(*da + ton2);
-    return;
-  }
-  if(sector == 6)
-  {
-    // Vector on times
-    ton1 = (-TWO_BY_SQRT_3 * (*b)) * FOC_TIM_PERIOD;
-    ton2 = ((*a) + ONE_BY_SQRT_3 * (*b)) * FOC_TIM_PERIOD;
-    // PWM timings
-    *da = (uint16_t)((FOC_TIM_PERIOD - ton1 - ton2) / 2);
-    *dc = (uint16_t)(*da + ton2);
-    *db = (uint16_t)(*dc + ton1);
-    return;
+    case 1:
+      // Vector on times
+      ton1 = (*a - ONE_BY_SQRT_3 * (*b) ) * FOC_TIM_PERIOD;
+      ton2 = (TWO_BY_SQRT_3 * (*b)) * FOC_TIM_PERIOD;
+      // PWM timings
+      *da = (uint16_t)( (FOC_TIM_PERIOD - ton1 - ton2) / 2);
+      *db = (uint16_t)(*da + ton1);
+      *dc = (uint16_t)(*db + ton2);
+      break;
+    case 2:
+      // Vector on times
+      ton1 = ((*a) + ONE_BY_SQRT_3 * (*b)) * FOC_TIM_PERIOD;
+      ton2 = (-(*a) + ONE_BY_SQRT_3 * (*b)) * FOC_TIM_PERIOD;
+      // PWM timings
+      *db = (uint16_t)((FOC_TIM_PERIOD - ton1 - ton2) / 2);
+      *da = (uint16_t)((*db) + ton2);
+      *dc = (uint16_t)((*da) + ton1);
+      break;
+    case 3:
+      // Vector on times
+      ton1 = (TWO_BY_SQRT_3 * (*b)) * FOC_TIM_PERIOD;
+      ton2 = (-(*a) - ONE_BY_SQRT_3 * (*b)) * FOC_TIM_PERIOD;
+      // PWM timings
+      *db = (uint16_t)((FOC_TIM_PERIOD - ton1 - ton2) / 2);
+      *dc = (uint16_t)((*db) + ton1);
+      *da = (uint16_t)((*dc) + ton2);
+      break;
+    case 4:
+      // Vector on times
+      ton1 = (-(*a) + ONE_BY_SQRT_3 * (*b)) * FOC_TIM_PERIOD;
+      ton2 = (-TWO_BY_SQRT_3 * (*b)) * FOC_TIM_PERIOD;
+      // PWM timings
+      *dc = (uint16_t)((FOC_TIM_PERIOD - ton1 - ton2) / 2);
+      *db = (uint16_t)((*dc) + ton2);
+      *da = (uint16_t)((*db) + ton1);
+      break;
+    case 5:
+      // Vector on times
+      ton1 = (-(*a) - ONE_BY_SQRT_3 * (*b)) * FOC_TIM_PERIOD;
+      ton2 = ((*a) - ONE_BY_SQRT_3 * (*b)) * FOC_TIM_PERIOD;
+      // PWM timings
+      *dc = (uint16_t)((FOC_TIM_PERIOD - ton1 - ton2) / 2);
+      *da = (uint16_t)(*dc + ton1);
+      *db = (uint16_t)(*da + ton2);
+      break;
+    case 6:
+      // Vector on times
+      ton1 = (-TWO_BY_SQRT_3 * (*b)) * FOC_TIM_PERIOD;
+      ton2 = ((*a) + ONE_BY_SQRT_3 * (*b)) * FOC_TIM_PERIOD;
+      // PWM timings
+      *da = (uint16_t)((FOC_TIM_PERIOD - ton1 - ton2) / 2);
+      *dc = (uint16_t)(*da + ton2);
+      *db = (uint16_t)(*dc + ton1);
+      break;
   }
 }
 

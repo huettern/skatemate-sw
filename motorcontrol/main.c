@@ -110,7 +110,7 @@ int main(void)
     chThdSleepMilliseconds(1);
     // drvDumpStatus();
     usbcdcHandleShell();
-    palTogglePad(GPIOE,14);
+    // palTogglePad(GPIOE,14);
   }
   
   
