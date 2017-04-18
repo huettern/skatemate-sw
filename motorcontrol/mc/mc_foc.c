@@ -268,11 +268,11 @@ static THD_FUNCTION(mcfocThread, arg) {
    * @param[in]  <unnamed>  { parameter_description }
    */
   float t = 0;
-  float freq = 100;
+  float freq = 50;
   float alpha, beta, d, q, theta;
   uint16_t da, db, dc;
   d = 0;
-  q = 0.9;
+  q = 0.5;
 
   while (true) {
   palSetPad(GPIOE,14);
@@ -285,6 +285,7 @@ static THD_FUNCTION(mcfocThread, arg) {
     TIMER_UPDATE_DUTY(da, db, dc);
     chThdSleepMicroseconds(FOC_THREAD_INTERVAL);
     t += FOC_THREAD_INTERVAL;
+    freq += 0.002;
   }
 }
 /**
