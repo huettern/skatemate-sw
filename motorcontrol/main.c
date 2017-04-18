@@ -25,10 +25,13 @@
 // #include "chprintf.h"
 #include "utelemetry.h"
 #include "drv8301.h"
+#include "mc_foc.h"
 
 #include "usbcdc.h"
 #include "usbcfg.h"
 #include "chprintf.h"
+
+#include "stm32f30x_conf.h"
 
 // #include "core_cm4_simd.h"
 #include "arm_math.h"
@@ -101,6 +104,7 @@ int main(void)
   // wait 10sec
   shellInit();
   drvInit();
+  mcfInit();
   while (true) 
   {
     chThdSleepMilliseconds(1);
@@ -153,5 +157,10 @@ int main(void)
   //   // usbcdcHandleShell();
   // }
 }
+
+void assert_failed(uint8_t* file, uint32_t line) {
+  // DBG("Assert fail at File %s Line %d", file, (int)line);
+  while(1);   // hang here (behavior is our your choice)  
+} 
 
 /** @} */

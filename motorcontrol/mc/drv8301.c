@@ -14,10 +14,9 @@
 
 #include "ch.h"
 #include "hal.h"
-#include "chprintf.h"
-#include "usbcfg.h"
+#include "defs.h"
 
-#define DBG(X, ...) chprintf(bssusb, X, ##__VA_ARGS__ )
+#include "stm32f30x_conf.h"
 
 /*===========================================================================*/
 /* settings                                                                */
@@ -127,6 +126,11 @@ static uint16_t readPacket(uint16_t data);
  */
 void drvInit(void)
 {
+  // GPIO clock enable
+  RCC_AHBPeriphClockCmd(RCC_AHBPeriph_GPIOA, ENABLE);
+  RCC_AHBPeriphClockCmd(RCC_AHBPeriph_GPIOB, ENABLE);
+  RCC_AHBPeriphClockCmd(RCC_AHBPeriph_GPIOC, ENABLE);
+
   // SPI peripheral
   palSetPadMode(DRV_SPI_SCK_PORT, DRV_SPI_SCK_PIN, PAL_MODE_ALTERNATE(6) |
                            PAL_STM32_OSPEED_HIGHEST);
@@ -157,11 +161,11 @@ void drvInit(void)
                            PAL_STM32_OSPEED_HIGHEST);
   palSetPadMode(DRV_INH_C_PORT, DRV_INH_C_PIN, PAL_MODE_ALTERNATE(6) |
                            PAL_STM32_OSPEED_HIGHEST);
-  palSetPadMode(DRV_INL_A_PORT, DRV_INL_A_PIN, PAL_MODE_ALTERNATE(6) |
+  palSetPadMode(DRV_INL_A_PORT, DRV_INL_A_PIN, PAL_MODE_ALTERNATE(4) |
                            PAL_STM32_OSPEED_HIGHEST);
   palSetPadMode(DRV_INL_B_PORT, DRV_INL_B_PIN, PAL_MODE_ALTERNATE(6) |
                            PAL_STM32_OSPEED_HIGHEST);
-  palSetPadMode(DRV_INL_C_PORT, DRV_INL_C_PIN, PAL_MODE_ALTERNATE(4) |
+  palSetPadMode(DRV_INL_C_PORT, DRV_INL_C_PIN, PAL_MODE_ALTERNATE(6) |
                            PAL_STM32_OSPEED_HIGHEST);
 
   // ADC Pins

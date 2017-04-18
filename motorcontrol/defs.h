@@ -17,6 +17,9 @@
 #ifndef _DEFS_H
 #define _DEFS_H
 
+#include "chprintf.h"
+#include "usbcfg.h"
+
 
 #define DEFS_THD_IDLE_WA_SIZE 			0x500
 #define DEFS_THD_SHELL_WA_SIZE 			2048
@@ -26,6 +29,7 @@
 
 #define SYSTEM_CORE_CLOCK	72000000 //Hz
 
+#define DBG(X, ...) chprintf(bssusb, X, ##__VA_ARGS__ )
 /*===========================================================================*/
 /* Test defines. Always uncomment for production                             */
 /*===========================================================================*/

@@ -27,6 +27,7 @@
 #include "defs.h"
 #include "util.h"
 #include "drv8301.h"
+#include "mc_foc.h"
 
 #include "chprintf.h"
 
@@ -141,6 +142,14 @@ static void cmd_drv(BaseSequentialStream *chp, int argc, char *argv[])
   (void)argv;
   drvDumpStatus();
 }
+static void cmd_duty(BaseSequentialStream *chp, int argc, char *argv[])
+{
+  (void)chp;
+  (void)argc;
+  (void)argv;
+  if(argc<3) return;
+  mcfSetDuty(atoi(argv[0]),atoi(argv[1]),atoi(argv[2]));
+}
 /**
  * List of shell commands
  */
@@ -148,6 +157,7 @@ static const ShellCommand commands[] = {
 		{"mem", cmd_mem},
     {"threads", cmd_threads},
     {"drv", cmd_drv},
+    {"duty", cmd_duty},
 		{NULL, NULL}
 };
 

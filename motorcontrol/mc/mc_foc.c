@@ -31,12 +31,10 @@
 #include "ch.h"
 #include "hal.h"
 #include "defs.h"
-#include "chprintf.h"
-#include "usbcfg.h"
 
 #include "stm32f30x_conf.h"
 
-#define DBG(X, ...) chprintf(bssusb, X, ##__VA_ARGS__ )
+
 
 /*===========================================================================*/
 /* settings                                                                */
@@ -56,6 +54,7 @@
  */
 #define FOC_TIM1_OC4_VALUE (SYSTEM_CORE_CLOCK / FOC_F_SW) - 1
 
+#define FOC_TIM_PERIOD SYSTEM_CORE_CLOCK / FOC_F_SW
 
 /*===========================================================================*/
 /* macros                                                                    */
@@ -72,8 +71,8 @@
 #define TIMER_UPDATE_DUTY(duty1, duty2, duty3) \
     TIM1->CR1 |= TIM_CR1_UDIS; \
     TIM1->CCR1 = duty1; \
-    TIM1->CCR2 = duty3; \
-    TIM1->CCR3 = duty2; \
+    TIM1->CCR2 = duty2; \
+    TIM1->CCR3 = duty3; \
     TIM1->CR1 &= ~TIM_CR1_UDIS;
 
 /*===========================================================================*/
@@ -116,7 +115,7 @@ void mcfInit(void)
    */
   tim_tbs.TIM_Prescaler = 0;
   tim_tbs.TIM_CounterMode = TIM_CounterMode_CenterAligned2;
-  tim_tbs.TIM_Period = SYSTEM_CORE_CLOCK / FOC_F_SW;
+  tim_tbs.TIM_Period = FOC_TIM_PERIOD;
   tim_tbs.TIM_ClockDivision = TIM_CKD_DIV1;
   tim_tbs.TIM_RepetitionCounter = 1;
   TIM_TimeBaseInit(TIM1, &tim_tbs);
@@ -213,6 +212,18 @@ void mcfInit(void)
   TIM_CtrlPWMOutputs(TIM1, ENABLE);
 }
 
+/**
+ * @brief      Sets the duty time of the three PWM outputs in raw timer ticks
+ *
+ * @param[in]  a     Phase a duty
+ * @param[in]  b     Phase b duty
+ * @param[in]  c     Phase c duty
+ */
+void mcfSetDuty (uint16_t a, uint16_t b, uint16_t c)
+{
+  TIMER_UPDATE_DUTY(c,b,a);
+  DBG("max duty: %d\r\n",FOC_TIM_PERIOD);
+}
 
 /*===========================================================================*/
 /* Module static functions.                                                  */
