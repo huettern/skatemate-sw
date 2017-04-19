@@ -43,7 +43,8 @@ static const int mNumMeasurements = sizeof(utlmMeasurements) / sizeof(utlmMeasur
  *
  * @return     none
  */
-#define DEF_WRITE(dat, n) chSequentialStreamWrite(bssusb,(const uint8_t*)dat,n)
+// #define DEF_WRITE(dat, n) chSequentialStreamWrite(bssusb,(const uint8_t*)dat,n)
+#define DEF_WRITE(dat, n) sdWrite(&SD3, (uint8_t *) dat, n);
 
 /**
  * Buffer size to use in RAM for creating packets
