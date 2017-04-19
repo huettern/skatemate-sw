@@ -252,7 +252,7 @@ void mcfInit(void)
   TIM_OC1PreloadConfig(TIM1, TIM_OCPreload_Enable);
   TIM_OC2PreloadConfig(TIM1, TIM_OCPreload_Enable);
   TIM_OC3PreloadConfig(TIM1, TIM_OCPreload_Enable);
-  // TIM_OC4PreloadConfig(TIM1, TIM_OCPreload_Enable);
+  TIM_OC4PreloadConfig(TIM1, TIM_OCPreload_Enable);
   
   /**
    * Configures the Break feature, dead time, Lock level, OSSI/OSSR State
@@ -282,8 +282,6 @@ void mcfInit(void)
    */
   TIM_CCPreloadControl(TIM1, ENABLE);
   TIM_ARRPreloadConfig(TIM1, ENABLE);
-  // Trigger for ADC
-  TIM_SelectOutputTrigger(TIM1, TIM_TRGOSource_OC4Ref);
 
   /******* DMA *******/  
   /**
@@ -367,7 +365,7 @@ void mcfInit(void)
    */
   adc_is.ADC_ContinuousConvMode = DISABLE;
   adc_is.ADC_Resolution = ADC_Resolution_12b;
-  adc_is.ADC_ExternalTrigConvEvent = ADC_ExternalTrigConvEvent_9;
+  adc_is.ADC_ExternalTrigConvEvent = ADC_ExternalTrigConvEvent_9; // 9 for trigo
   adc_is.ADC_ExternalTrigEventEdge = ADC_ExternalTrigEventEdge_FallingEdge;
   // adc_is.ADC_ExternalTrigEventEdge = ADC_ExternalTrigEventEdge_None;
   adc_is.ADC_DataAlign = ADC_DataAlign_Right;
@@ -425,6 +423,10 @@ void mcfInit(void)
   /**
    * Enable ADC
    */
+  ADC_ITConfig(ADC1, ADC_IT_EOC, ENABLE);
+  nvicEnableVector(ADC1_2_IRQn, 4);
+  // nvicEnableVector(ADC3_IRQn, 4);
+
   ADC_Cmd(ADC1, ENABLE);
   ADC_Cmd(ADC3, ENABLE);
   ADC_DMACmd(ADC1, ENABLE);
@@ -442,6 +444,9 @@ void mcfInit(void)
    */
   TIM_CtrlPWMOutputs(TIM1, ENABLE);
 
+  // Trigger for ADC
+  TIM_SelectOutputTrigger(TIM1, TIM_TRGOSource_OC4Ref);
+  
   analogCalibrate();
 
   /**
@@ -818,6 +823,27 @@ static void runObserver(float *ua, float *ub, float *ia, float *ib, float *dt)
 
   mObs.theta = utilFastAtan2((mObs.x[1] - mMotParms.Ls*(*ib)), 
     (mObs.x[0] - mMotParms.Ls*(*ia) ));
+}
+
+/**
+ * @brief      ADC1_2 IRQ handler
+ */
+CH_IRQ_HANDLER(Vector88) {
+  CH_IRQ_PROLOGUE();
+  palTogglePad(GPIOE,14);
+  ADC_ClearITPendingBit(ADC1, ADC_IT_EOC);
+  // mc_interface_adc_inj_int_handler();
+  CH_IRQ_EPILOGUE();
+}
+
+/**
+ * @brief      ADC IRQ handler
+ */
+CH_IRQ_HANDLER(Vector47) {
+  CH_IRQ_PROLOGUE();
+  // ADC_ClearITPendingBit(ADC1, ADC_IT_JEOC);
+  // mc_interface_adc_inj_int_handler();
+  CH_IRQ_EPILOGUE();
 }
 
 /** @} */

@@ -117,7 +117,7 @@ int main(void)
     chThdSleepMilliseconds(1);
     if(++ctr > 1000)
     {
-      palTogglePad(GPIOE,14);
+      
       mcfDumpData();
       ctr = 0;
     }
