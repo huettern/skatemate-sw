@@ -363,10 +363,10 @@ void mcfInit(void)
    * ADC_AutoInjMode: dont do injected channels after regular channels
    * ADC_NbrOfRegChannel: 4 channels on ADC 1 (Phase A B C, Supply) and 2 on ADC3 (currents)
    */
-  adc_is.ADC_ContinuousConvMode = DISABLE;
+  adc_is.ADC_ContinuousConvMode = ADC_ContinuousConvMode_Enable;
   adc_is.ADC_Resolution = ADC_Resolution_12b;
   adc_is.ADC_ExternalTrigConvEvent = ADC_ExternalTrigConvEvent_9; // 9 for trigo
-  adc_is.ADC_ExternalTrigEventEdge = ADC_ExternalTrigEventEdge_FallingEdge;
+  adc_is.ADC_ExternalTrigEventEdge = ADC_ExternalTrigEventEdge_BothEdge;
   // adc_is.ADC_ExternalTrigEventEdge = ADC_ExternalTrigEventEdge_None;
   adc_is.ADC_DataAlign = ADC_DataAlign_Right;
   adc_is.ADC_OverrunMode = DISABLE;
@@ -423,10 +423,13 @@ void mcfInit(void)
   /**
    * Enable ADC
    */
-  ADC_ITConfig(ADC1, ADC_IT_EOC, ENABLE);
-  nvicEnableVector(ADC1_2_IRQn, 4);
-  // nvicEnableVector(ADC3_IRQn, 4);
+  // ADC_ITConfig(ADC1, ADC_IT_EOS, ENABLE);
+  ADC_ITConfig(ADC3, ADC_IT_EOS, ENABLE);
+  // nvicEnableVector(ADC1_2_IRQn, 4);
+  nvicEnableVector(ADC3_IRQn, 4);
 
+  // ADC_ExternalTriggerConfig(ADC1, ADC_ExternalTrigConvEvent_9, ADC_ExternalTrigEventEdge_FallingEdge);
+  // ADC_ExternalTriggerConfig(ADC3, ADC_ExternalTrigConvEvent_9, ADC_ExternalTrigEventEdge_FallingEdge);
   ADC_Cmd(ADC1, ENABLE);
   ADC_Cmd(ADC3, ENABLE);
   ADC_DMACmd(ADC1, ENABLE);
@@ -446,7 +449,7 @@ void mcfInit(void)
 
   // Trigger for ADC
   TIM_SelectOutputTrigger(TIM1, TIM_TRGOSource_OC4Ref);
-  
+
   analogCalibrate();
 
   /**
@@ -485,8 +488,8 @@ void mcfDumpData(void)
   DBG2("SI     %7.3f |  %7.3f |  %7.3f |  %7.3f |  %7.3f |  %7.3f |  %7.3f\r\n", ADC_VOLT(0), ADC_VOLT(1),
     ADC_VOLT(2), ADC_VOLT(3), ADC_AMP(4), ADC_AMP(5), ADC_TEMP(6));
 
-  ADC_StartConversion(ADC1);
-  ADC_StartConversion(ADC3);
+  // ADC_StartConversion(ADC1);
+  // ADC_StartConversion(ADC3);
 }
 
 /*===========================================================================*/
@@ -830,8 +833,8 @@ static void runObserver(float *ua, float *ub, float *ia, float *ib, float *dt)
  */
 CH_IRQ_HANDLER(Vector88) {
   CH_IRQ_PROLOGUE();
-  palTogglePad(GPIOE,14);
-  ADC_ClearITPendingBit(ADC1, ADC_IT_EOC);
+  ADC_ClearITPendingBit(ADC1, ADC_IT_EOS);
+  ADC_StartConversion(ADC1);
   // mc_interface_adc_inj_int_handler();
   CH_IRQ_EPILOGUE();
 }
@@ -839,9 +842,11 @@ CH_IRQ_HANDLER(Vector88) {
 /**
  * @brief      ADC IRQ handler
  */
-CH_IRQ_HANDLER(Vector47) {
+CH_IRQ_HANDLER(VectorFC) {
   CH_IRQ_PROLOGUE();
-  // ADC_ClearITPendingBit(ADC1, ADC_IT_JEOC);
+  palTogglePad(GPIOE,14);
+  ADC_ClearITPendingBit(ADC3, ADC_IT_EOS);
+  ADC_StartConversion(ADC3);
   // mc_interface_adc_inj_int_handler();
   CH_IRQ_EPILOGUE();
 }
