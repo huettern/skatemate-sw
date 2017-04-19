@@ -102,6 +102,7 @@ int main(void)
   res = __UADD8(op1,op2);
 
   // wait 10sec
+  uint16_t ctr = 0;
   shellInit();
   drvInit();
   mcfInit();
@@ -113,7 +114,13 @@ int main(void)
   utlmEnable(true);
   while (true) 
   {
-    chThdSleepMilliseconds(1000);
+    chThdSleepMilliseconds(1);
+    if(++ctr > 1000)
+    {
+      palTogglePad(GPIOE,14);
+      mcfDumpData();
+      ctr = 0;
+    }
     // utlmSend(0, 10, xdata, ydata);
     // drvDumpStatus();
     usbcdcHandleShell();

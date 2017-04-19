@@ -59,6 +59,7 @@ typedef struct
 /*===========================================================================*/
 void mcfInit(void);
 void mcfSetDuty (uint16_t a, uint16_t b, uint16_t c);
+void mcfDumpData(void);
 
 
 #endif

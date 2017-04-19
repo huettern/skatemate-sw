@@ -85,6 +85,24 @@
 #define FOC_PARAM_DEFAULT_SPEED_KD    0
 
 /*===========================================================================*/
+/* private data                                                              */
+/*===========================================================================*/
+/*
+ * Working area for the State machine thread
+ */
+static THD_WORKING_AREA(mcfWA, DEFS_THD_MCFOC_WA_SIZE);
+static THD_FUNCTION(mcfocThread, arg);
+
+static mcfMotorParameter_t mMotParms;
+static mcfFOCParameter_t mFOCParms;
+
+/**
+ * @brief      Observer working set
+ */
+static mcfObs_t mObs;
+static volatile uint16_t mADCValue[8]; // raw converted values
+
+/*===========================================================================*/
 /* macros                                                                    */
 /*===========================================================================*/
 /**
@@ -107,23 +125,10 @@
  * Period, the timer should run on. Calculated by Core clock and FOC_F_SW
  */
 #define FOC_TIM_PERIOD SYSTEM_CORE_CLOCK / FOC_F_SW
-
-/*===========================================================================*/
-/* private data                                                              */
-/*===========================================================================*/
-/*
- * Working area for the State machine thread
- */
-static THD_WORKING_AREA(mcfWA, DEFS_THD_MCFOC_WA_SIZE);
-static THD_FUNCTION(mcfocThread, arg);
-
-static mcfMotorParameter_t mMotParms;
-static mcfFOCParameter_t mFOCParms;
-
 /**
- * @brief      Observer working set
+ * @brief      Returns the ADC voltage after the resistor divider
  */
-static mcfObs_t mObs;
+#define ADC_VOLT(ch) ((float)mADCValue[ch] / 4096.0f * 3.3f * (41.2/2.2))
 
 /*===========================================================================*/
 /* prototypes                                                                */
@@ -242,21 +247,154 @@ void mcfInit(void)
    */
   TIM_CCPreloadControl(TIM1, ENABLE);
   TIM_ARRPreloadConfig(TIM1, ENABLE);
+  // Trigger for ADC
+  TIM_SelectOutputTrigger(TIM1, TIM_TRGOSource_OC4Ref);
 
-  /******* ADC *******/
- //  adc_cis.ADC_Mode
- //  adc_cis.ADC_Clock
- //  adc_cis.ADC_DMAAccessMode
- //  adc_cis.ADC_DMAModeingDelay
+  /******* DMA *******/  
+  /**
+   * DMA to transfer the regular channels to memory
+   * 
+   * DMA_PeripheralBaseAddr: ADC data register
+   * DMA_MemoryBaseAddr: Memory address to start
+   * DMA_DIR: Copy from peripheral to memory
+   * DMA_BufferSize: number of data to transfer: 4 (one for each channel)
+   * DMA_PeripheralInc: Dont increment the peripheral data adress
+   * DMA_MemoryInc: Enable memory increment
+   * Size: Each register is 16 bit = half word
+   * Mode: Circular, start at the beginning after 4 transfers
+   * Priority: Should be highest
+   * M2M: Dont copy memory to memory
+   */
+  dma_is.DMA_PeripheralBaseAddr = (uint32_t)&(ADC1->DR);
+  dma_is.DMA_MemoryBaseAddr = (uint32_t)(&mADCValue[0]);
+  dma_is.DMA_DIR = DMA_DIR_PeripheralSRC;
+  dma_is.DMA_BufferSize = 4;
+  dma_is.DMA_PeripheralInc = DMA_PeripheralInc_Disable;
+  dma_is.DMA_MemoryInc = DMA_MemoryInc_Enable;
+  dma_is.DMA_PeripheralDataSize = DMA_PeripheralDataSize_HalfWord;
+  dma_is.DMA_MemoryDataSize = DMA_MemoryDataSize_HalfWord;
+  dma_is.DMA_Mode = DMA_Mode_Circular;
+  dma_is.DMA_Priority = DMA_Priority_VeryHigh;
+  dma_is.DMA_M2M = DMA_M2M_Disable;
+  DMA_Init(DMA1_Channel1, &dma_is);
+  /**
+   * Change source and destination address for ADC3
+   */
+  dma_is.DMA_PeripheralBaseAddr = (uint32_t)&(ADC3->DR);
+  dma_is.DMA_MemoryBaseAddr = (uint32_t)(&mADCValue[4]);
+  DMA_Init(DMA2_Channel5, &dma_is);
 
+  // Enable
+  DMA_Cmd(DMA1_Channel1, ENABLE);
+  DMA_Cmd(DMA2_Channel5, ENABLE);
 
- //  ADC_CommonInitStructure.ADC_Mode = ADC_TripleMode_RegSimult;
- //  ADC_CommonInitStructure.ADC_Prescaler = ADC_Prescaler_Div2;
- //  ADC_CommonInitStructure.ADC_DMAAccessMode = ADC_DMAAccessMode_1;
- //  ADC_CommonInitStructure.ADC_TwoSamplingDelay = ADC_TwoSamplingDelay_5Cycles;
- //  ADC_CommonInit(&ADC_CommonInitStructure);
+  /******* ADC *******/  
+  // Clock
+  RCC_AHBPeriphClockCmd(RCC_AHBPeriph_DMA2, ENABLE);
+  RCC_AHBPeriphClockCmd(RCC_AHBPeriph_ADC12, ENABLE);
+  RCC_AHBPeriphClockCmd(RCC_AHBPeriph_ADC34, ENABLE); 
 
- // ADC_ExternalTrigInjecConv_T1_CC4
+  RCC_ADCCLKConfig(RCC_ADC12PLLCLK_Div10); 
+  RCC_ADCCLKConfig(RCC_ADC34PLLCLK_Div10); 
+
+  // GPIOs (SOx pins are done in the drv8301 module)
+  palSetPadMode(GPIOA, 0, PAL_MODE_INPUT_ANALOG);
+  palSetPadMode(GPIOA, 1, PAL_MODE_INPUT_ANALOG);
+  palSetPadMode(GPIOA, 2, PAL_MODE_INPUT_ANALOG);
+  palSetPadMode(GPIOA, 3, PAL_MODE_INPUT_ANALOG);
+
+  /**
+   * ADC_Mode: ADCs 1/2 and 3/4 are working independant
+   * ADC_Clock: Synchronous clock mode divided by 2 HCLK/2
+   * ADC_DMAAccessMode: MDMA mode enabled for 12 and 10-bit resolution
+   * ADC_DMAMode: DMA circular event generation for continuous data streams
+   * ADC_TwoSamplingDelay: Not used in independant mode
+   */
+  adc_cis.ADC_Mode = ADC_Mode_Independent;
+  adc_cis.ADC_Clock = ADC_Clock_SynClkModeDiv2;
+  adc_cis.ADC_DMAAccessMode = ADC_DMAAccessMode_1;
+  adc_cis.ADC_DMAMode = ADC_DMAMode_Circular;
+  adc_cis.ADC_TwoSamplingDelay = 0x00;
+  ADC_CommonInit(ADC1, &adc_cis);
+  ADC_CommonInit(ADC3, &adc_cis);
+
+  /**
+   * ADC specific settings
+   * 
+   * ADC_ContinuousConvMode: Single conversion on trigger
+   * ADC_Resolution: maximum resolution
+   * ADC_ExternalTrigConvEvent: TIM1 TRGO event
+   * ADC_ExternalTrigEventEdge: on falling edge of tim1 channel4
+   * ADC_DataAlign: ADC_DataAlign_Right
+   * ADC_OverrunMode: on overrun keep the valid data
+   * ADC_AutoInjMode: dont do injected channels after regular channels
+   * ADC_NbrOfRegChannel: 4 channels on ADC 1 (Phase A B C, Supply) and 2 on ADC3 (currents)
+   */
+  adc_is.ADC_ContinuousConvMode = DISABLE;
+  adc_is.ADC_Resolution = ADC_Resolution_12b;
+  adc_is.ADC_ExternalTrigConvEvent = ADC_ExternalTrigConvEvent_9;
+  adc_is.ADC_ExternalTrigEventEdge = ADC_ExternalTrigEventEdge_FallingEdge;
+  // adc_is.ADC_ExternalTrigEventEdge = ADC_ExternalTrigEventEdge_None;
+  adc_is.ADC_DataAlign = ADC_DataAlign_Right;
+  adc_is.ADC_OverrunMode = DISABLE;
+  adc_is.ADC_AutoInjMode = DISABLE;
+  adc_is.ADC_NbrOfRegChannel = 4;
+  ADC_Init(ADC1, &adc_is);
+  ADC_Init(ADC3, &adc_is);
+
+  // Enable voltage regulator
+  ADC_VoltageRegulatorCmd(ADC1, ENABLE);
+  ADC_VoltageRegulatorCmd(ADC3, ENABLE);
+  chThdSleepMicroseconds(20);
+
+  // Enable Vrefint channel
+  ADC_VrefintCmd(ADC1, ENABLE);
+  ADC_VrefintCmd(ADC3, ENABLE);
+
+  //calibrate
+  ADC_SelectCalibrationMode(ADC1, ADC_CalibrationMode_Single);
+  ADC_StartCalibration(ADC1);
+  ADC_SelectCalibrationMode(ADC3, ADC_CalibrationMode_Single);
+  ADC_StartCalibration(ADC3);
+  while(ADC_GetCalibrationStatus(ADC1) == SET);
+  while(ADC_GetCalibrationStatus(ADC3) == SET);
+
+  /**
+   * Configure the regular channels
+   * 
+   * ADC1: 
+   * - 1: IN1 Phase C
+   * - 2: IN2 Phase B
+   * - 3: IN3 Phase A
+   * - 4: IN9 Supply
+   */
+  ADC_RegularChannelConfig(ADC1, ADC_Channel_1, 1, ADC_SampleTime_1Cycles5);
+  ADC_RegularChannelConfig(ADC1, ADC_Channel_2, 2, ADC_SampleTime_1Cycles5);
+  ADC_RegularChannelConfig(ADC1, ADC_Channel_3, 3, ADC_SampleTime_1Cycles5);
+  ADC_RegularChannelConfig(ADC1, ADC_Channel_9, 4, ADC_SampleTime_1Cycles5);
+  ADC_RegularChannelSequencerLengthConfig(ADC1, 4);
+  /** 
+   * ADC3:
+   * - 1: IN12 SOB
+   * - 2: IN1  SOA
+   * - 3: Temperatur
+   * - 4: VrefInt
+   */
+  ADC_RegularChannelConfig(ADC3, ADC_Channel_12, 1, ADC_SampleTime_1Cycles5);
+  ADC_RegularChannelConfig(ADC3, ADC_Channel_1, 2, ADC_SampleTime_1Cycles5);
+  ADC_RegularChannelConfig(ADC3, ADC_Channel_TempSensor, 3, ADC_SampleTime_1Cycles5);
+  ADC_RegularChannelConfig(ADC3, ADC_Channel_Vrefint, 4, ADC_SampleTime_1Cycles5);
+  ADC_RegularChannelSequencerLengthConfig(ADC3, 4);
+
+  /**
+   * Enable ADC
+   */
+  ADC_Cmd(ADC1, ENABLE);
+  ADC_Cmd(ADC3, ENABLE);
+  ADC_DMACmd(ADC1, ENABLE);
+  ADC_DMACmd(ADC3, ENABLE);
+  ADC_StartConversion(ADC1);
+  ADC_StartConversion(ADC3);
 
   /**
    * Enable timer
@@ -287,6 +425,22 @@ void mcfSetDuty (uint16_t a, uint16_t b, uint16_t c)
 {
   TIMER_UPDATE_DUTY(c,b,a);
   DBG("max duty: %d\r\n",FOC_TIM_PERIOD);
+}
+
+/**
+ * @brief      Dumps the local data to the debug stream
+ */
+void mcfDumpData(void)
+{
+  DBG("\r\n--- ADC ---\r\n");
+  DBG("       ph_C |  ph_B |  ph_A |  v_in | cur_b | cur_a |  temp |  vref\r\n");
+  DBG("raw   %05d | %05d | %05d | %05d | %05d | %05d | %05d | %05d\r\n", mADCValue[0], mADCValue[1],
+    mADCValue[2], mADCValue[3], mADCValue[4], mADCValue[5], mADCValue[6], mADCValue[7]);
+  DBG("volt  %1.3f | %1.3f | %1.3f | %1.3f | %1.3f | %1.3f | %1.3f | %1.3f\r\n", ADC_VOLT(0), ADC_VOLT(1),
+    ADC_VOLT(2), ADC_VOLT(3), ADC_VOLT(4), ADC_VOLT(5), ADC_VOLT(6), ADC_VOLT(7));
+
+  ADC_StartConversion(ADC1);
+  ADC_StartConversion(ADC3);
 }
 
 /*===========================================================================*/
@@ -324,13 +478,9 @@ static THD_FUNCTION(mcfocThread, arg) {
   q = 0.5;
 
   while (true) {
-  palSetPad(GPIOE,14);
     theta = 2*PI*freq*(t/1000000); //800ns
-  palTogglePad(GPIOE,14);
     invpark(&d, &q, &theta, &alpha, &beta); // 5.5us
-  palTogglePad(GPIOE,14);
     svm(&alpha, &beta, &da, &db, &dc); // 4.3us
-  palTogglePad(GPIOE,14);  
     TIMER_UPDATE_DUTY(da, db, dc);
     chThdSleepMicroseconds(FOC_THREAD_INTERVAL);
     t += FOC_THREAD_INTERVAL;
