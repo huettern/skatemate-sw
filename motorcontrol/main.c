@@ -111,7 +111,7 @@ int main(void)
   sdStart(&SD3, NULL);
   char data[] = "Hello World ! \n \r";
   sdWrite(&SD3, (uint8_t *) data, strlen(data));
-  utlmEnable(true);
+  // utlmEnable(true);
   while (true) 
   {
     chThdSleepMilliseconds(1);

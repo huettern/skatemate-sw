@@ -19,6 +19,12 @@
 /*===========================================================================*/
 /* Macros				                                                             */
 /*===========================================================================*/
+/**
+ * Internal current diff amps setting. changes must be done in init 
+ * function
+ */
+#define DRV_CURRENT_GAIN 10.0f
+
 // Hardware settings
 #define DRV_EN_GATE_PORT    GPIOC
 #define DRV_EN_GATE_PIN     6

@@ -37,7 +37,8 @@
 
 #include "stm32f30x_conf.h"
 
-
+#include "utelemetry.h"
+#include "drv8301.h"
 
 /*===========================================================================*/
 /* settings                                                                */
@@ -83,6 +84,23 @@
 #define FOC_PARAM_DEFAULT_SPEED_KP    0.1
 #define FOC_PARAM_DEFAULT_SPEED_KI    0
 #define FOC_PARAM_DEFAULT_SPEED_KD    0
+/**
+ * @brief      Resistor divider for voltage measurements
+ */
+#define BOARD_ADC_PIN_TO_VOLT (float)((2.2f + 39.0f)/2.2f)
+/**
+ * @brief      Shunt resistor for current measurement
+ */
+#define BOARD_ADC_PIN_TO_AMP (float)(1000.0/DRV_CURRENT_GAIN)
+
+#define ADC_CH_PH_A    2
+#define ADC_CH_PH_B    1
+#define ADC_CH_PH_C    0
+#define ADC_CH_SUPPL   3
+#define ADC_CH_CURR_A  5
+#define ADC_CH_CURR_B  4
+#define ADC_CH_TEMP    6
+#define ADC_CH_REF     7
 
 /*===========================================================================*/
 /* private data                                                              */
@@ -90,8 +108,10 @@
 /*
  * Working area for the State machine thread
  */
-static THD_WORKING_AREA(mcfWA, DEFS_THD_MCFOC_WA_SIZE);
-static THD_FUNCTION(mcfocThread, arg);
+static THD_WORKING_AREA(mcfMainWA, DEFS_THD_MCFOCMAIN_WA_SIZE);
+static THD_FUNCTION(mcfocMainThread, arg);
+static THD_WORKING_AREA(mcfSecondWA, DEFS_THD_MCFOCSECOND_WA_SIZE);
+static THD_FUNCTION(mcfocSecondaryThread, arg);
 
 static mcfMotorParameter_t mMotParms;
 static mcfFOCParameter_t mFOCParms;
@@ -100,7 +120,9 @@ static mcfFOCParameter_t mFOCParms;
  * @brief      Observer working set
  */
 static mcfObs_t mObs;
+
 static volatile uint16_t mADCValue[8]; // raw converted values
+static float mADCtoPinFactor, mADCtoVoltsFactor, mADCtoAmpsFactor;
 
 /*===========================================================================*/
 /* macros                                                                    */
@@ -126,14 +148,27 @@ static volatile uint16_t mADCValue[8]; // raw converted values
  */
 #define FOC_TIM_PERIOD SYSTEM_CORE_CLOCK / FOC_F_SW
 /**
+ * @brief      Returns the ADC voltage on the pin
+ */
+#define ADC_PIN(ch) ( (float)mADCValue[ch] * mADCtoPinFactor)
+/**
  * @brief      Returns the ADC voltage after the resistor divider
  */
-#define ADC_VOLT(ch) ((float)mADCValue[ch] / 4096.0f * 3.3f * (41.2/2.2))
+#define ADC_VOLT(ch) ( (float)mADCValue[ch] * mADCtoVoltsFactor)
+/**
+ * @brief      Returns the current in the shunt resister
+ */
+#define ADC_AMP(ch) ( (float)(mADCValue[ch]-2047) * mADCtoAmpsFactor)
+/**
+ * @brief      Returns the current temperature
+ */
+#define ADC_TEMP(ch) ((((1.43 - ADC_PIN(ch) )) / 0.0043F) + 25.0f)
 
 /*===========================================================================*/
 /* prototypes                                                                */
 /*===========================================================================*/
-static void dataInit();
+static void dataInit(void);
+static void analogCalibrate(void);
 
 static void svm (float* a, float* b, uint16_t* da, uint16_t* db, uint16_t* dc);
 
@@ -345,6 +380,7 @@ void mcfInit(void)
   // Enable voltage regulator
   ADC_VoltageRegulatorCmd(ADC1, ENABLE);
   ADC_VoltageRegulatorCmd(ADC3, ENABLE);
+  ADC_TempSensorCmd(ADC1, ENABLE);
   chThdSleepMicroseconds(20);
 
   // Enable Vrefint channel
@@ -406,10 +442,13 @@ void mcfInit(void)
    */
   TIM_CtrlPWMOutputs(TIM1, ENABLE);
 
+  analogCalibrate();
+
   /**
    * Create thread
    */
-  (void)chThdCreateStatic(mcfWA, sizeof(mcfWA), HIGHPRIO, mcfocThread, NULL);
+  (void)chThdCreateStatic(mcfMainWA, sizeof(mcfMainWA), HIGHPRIO, mcfocMainThread, NULL);
+  (void)chThdCreateStatic(mcfSecondWA, sizeof(mcfSecondWA), NORMALPRIO, mcfocSecondaryThread, NULL);
 }
 
 
@@ -432,12 +471,14 @@ void mcfSetDuty (uint16_t a, uint16_t b, uint16_t c)
  */
 void mcfDumpData(void)
 {
-  DBG("\r\n--- ADC ---\r\n");
-  DBG("       ph_C |  ph_B |  ph_A |  v_in | cur_b | cur_a |  temp |  vref\r\n");
-  DBG("raw   %05d | %05d | %05d | %05d | %05d | %05d | %05d | %05d\r\n", mADCValue[0], mADCValue[1],
+  DBG2("\r\n--- ADC ---\r\n");
+  DBG2("          ph_C |     ph_B |     ph_A |     v_in |    cur_b |    cur_a |     temp |     vref\r\n");
+  DBG2("raw       %04d |     %04d |     %04d |     %04d |     %04d |     %04d |     %04d |     %04d\r\n", mADCValue[0], mADCValue[1],
     mADCValue[2], mADCValue[3], mADCValue[4], mADCValue[5], mADCValue[6], mADCValue[7]);
-  DBG("volt  %1.3f | %1.3f | %1.3f | %1.3f | %1.3f | %1.3f | %1.3f | %1.3f\r\n", ADC_VOLT(0), ADC_VOLT(1),
-    ADC_VOLT(2), ADC_VOLT(3), ADC_VOLT(4), ADC_VOLT(5), ADC_VOLT(6), ADC_VOLT(7));
+  DBG2("pin    %7.3f |  %7.3f |  %7.3f |  %7.3f |  %7.3f |  %7.3f |  %7.3f |  %7.3f\r\n", ADC_PIN(0), ADC_PIN(1),
+    ADC_PIN(2), ADC_PIN(3), ADC_PIN(4), ADC_PIN(5), ADC_PIN(6), ADC_PIN(7));
+  DBG2("SI     %7.3f |  %7.3f |  %7.3f |  %7.3f |  %7.3f |  %7.3f |  %7.3f\r\n", ADC_VOLT(0), ADC_VOLT(1),
+    ADC_VOLT(2), ADC_VOLT(3), ADC_AMP(4), ADC_AMP(5), ADC_TEMP(6));
 
   ADC_StartConversion(ADC1);
   ADC_StartConversion(ADC3);
@@ -446,9 +487,9 @@ void mcfDumpData(void)
 /*===========================================================================*/
 /* Module static functions.                                                  */
 /*===========================================================================*/
-static THD_FUNCTION(mcfocThread, arg) {
+static THD_FUNCTION(mcfocMainThread, arg) {
   (void)arg;
-  chRegSetThreadName(DEFS_THD_MCFOC_NAME);
+  chRegSetThreadName(DEFS_THD_MCFOC_MAIN_NAME);
 
   // while(true)
   // {
@@ -487,10 +528,38 @@ static THD_FUNCTION(mcfocThread, arg) {
     freq += 0.002;
   }
 }
+static THD_FUNCTION(mcfocSecondaryThread, arg)
+{
+  (void)arg;
+  chRegSetThreadName(DEFS_THD_MCFOC_SECOND_NAME);
+  static float ph_a, ph_b, ph_c, suppl, curr_a, curr_b;
+  static uint64_t x = 0;
+  // utlmEnable(true);
+  while(true)
+  {
+    ph_a = ADC_VOLT(ADC_CH_PH_A);
+    ph_b = ADC_VOLT(ADC_CH_PH_B);
+    ph_c = ADC_VOLT(ADC_CH_PH_C);
+    suppl = ADC_VOLT(ADC_CH_SUPPL);
+    curr_a = ADC_VOLT(ADC_CH_CURR_A);
+    curr_b = ADC_VOLT(ADC_CH_CURR_B);
+    // utlmSend(0, 1, &x, &ph_a);
+    // utlmSend(1, 1, &x, &ph_b);
+    // utlmSend(2, 1, &x, &ph_c);
+    // utlmSend(3, 1, &x, &suppl);
+    // utlmSend(4, 1, &x, &curr_a);
+    // utlmSend(5, 1, &x, &curr_b);
+    DBG3("%d %.3f %.3f %.3f %.3f %.3f %.3f ",
+      x, ph_a, ph_b, ph_c, suppl, curr_a, curr_b);
+    DBG3("\r\n");
+    x+=10;
+    chThdSleepMilliseconds(10);
+  }
+}
 /**
  * @brief      Initializes the static data with default values
  */
-static void dataInit()
+static void dataInit(void)
 {
   mMotParms.psi = FOC_MOTOR_DEFAULT_PSI;
   mMotParms.p = FOC_MOTOR_DEFAULT_P;
@@ -508,6 +577,29 @@ static void dataInit()
   mFOCParms.speed_kp = FOC_PARAM_DEFAULT_SPEED_KP;
   mFOCParms.speed_ki = FOC_PARAM_DEFAULT_SPEED_KI;
   mFOCParms.speed_kd = FOC_PARAM_DEFAULT_SPEED_KD;
+}
+/**
+ * @brief      Calibrates all analog signals
+ */
+static void analogCalibrate(void)
+{
+  const uint8_t* vrefint_cal_lsb = (uint8_t*)0x1FFFF7BA;
+  const uint8_t* vrefint_cal_msb = (uint8_t*)0x1FFFF7BB;
+  const uint16_t vrefint_cal = ((*vrefint_cal_msb)<<8) | (*vrefint_cal_lsb);
+
+  // wait for data in vref input
+  while(mADCValue[7] == 0);
+
+  // reference man, page 375
+  // mADCtoPinFactor = 3.3f * (float)vrefint_cal / ((float)mADCValue[7]*4095.0f);
+  mADCtoPinFactor = 3.3f / 4095.0f;
+  mADCtoVoltsFactor = mADCtoPinFactor * BOARD_ADC_PIN_TO_VOLT;
+  mADCtoAmpsFactor =  mADCtoPinFactor * BOARD_ADC_PIN_TO_AMP;
+
+  DBG2("vrefint_cal=%d\r\n",vrefint_cal);
+  DBG2("mADCtoPinFactor=%f\r\n", mADCtoPinFactor);
+  DBG2("mADCtoVoltsFactor=%f\r\n", mADCtoVoltsFactor);
+  DBG2("mADCtoAmpsFactor=%f\r\n", mADCtoAmpsFactor);
 }
 /**
  * @brief      Calculates the duty cycles based on the input vectors in the
