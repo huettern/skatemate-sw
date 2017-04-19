@@ -75,6 +75,9 @@
  * FOC defautl parameters
  */
 #define FOC_PARAM_DEFAULT_OBS_GAIN    100e6
+#define FOC_PARAM_DEFAULT_OBS_SPEED_KP  2000.0  
+#define FOC_PARAM_DEFAULT_OBS_SPEED_KI  20000.0
+#define FOC_PARAM_DEFAULT_OBS_SPEED_KD  0.0
 #define FOC_PARAM_DEFAULT_CURR_D_KP   0.097
 #define FOC_PARAM_DEFAULT_CURR_D_KI   0
 #define FOC_PARAM_DEFAULT_CURR_D_KD   0
@@ -115,6 +118,7 @@ static THD_FUNCTION(mcfocSecondaryThread, arg);
 
 static mcfMotorParameter_t mMotParms;
 static mcfFOCParameter_t mFOCParms;
+static mcfController_t mCtrl;
 
 /**
  * @brief      Observer working set
@@ -177,7 +181,10 @@ static void park (float* a, float* b, float* theta, float* d, float* q );
 static void invclark (float* a, float* b, float* va, float* vb, float* vc);
 static void invpark (float* d, float* q, float* theta, float* a, float* b);
 
-static void runObserver(float *ua, float *ub, float *ia, float *ib, float *dt);
+static void runPositionObserver(float *ua, float *ub, float *ia, float *ib, float *dt);
+static void runSpeedObserver (float *dt);
+static void runSpeedController (void);
+static void runCurrentController (void);
 
 /*===========================================================================*/
 /* Module public functions.                                                  */
@@ -284,6 +291,8 @@ void mcfInit(void)
   TIM_ARRPreloadConfig(TIM1, ENABLE);
 
   /******* DMA *******/  
+  RCC_AHBPeriphClockCmd(RCC_AHBPeriph_DMA1, ENABLE);
+  RCC_AHBPeriphClockCmd(RCC_AHBPeriph_DMA2, ENABLE);
   /**
    * DMA to transfer the regular channels to memory
    * 
@@ -323,19 +332,15 @@ void mcfInit(void)
 
   /******* ADC *******/  
   // Clock
-  RCC_AHBPeriphClockCmd(RCC_AHBPeriph_DMA2, ENABLE);
   RCC_AHBPeriphClockCmd(RCC_AHBPeriph_ADC12, ENABLE);
   RCC_AHBPeriphClockCmd(RCC_AHBPeriph_ADC34, ENABLE); 
-
   RCC_ADCCLKConfig(RCC_ADC12PLLCLK_Div10); 
   RCC_ADCCLKConfig(RCC_ADC34PLLCLK_Div10); 
-
   // GPIOs (SOx pins are done in the drv8301 module)
   palSetPadMode(GPIOA, 0, PAL_MODE_INPUT_ANALOG);
   palSetPadMode(GPIOA, 1, PAL_MODE_INPUT_ANALOG);
   palSetPadMode(GPIOA, 2, PAL_MODE_INPUT_ANALOG);
   palSetPadMode(GPIOA, 3, PAL_MODE_INPUT_ANALOG);
-
   /**
    * ADC_Mode: ADCs 1/2 and 3/4 are working independant
    * ADC_Clock: Synchronous clock mode divided by 2 HCLK/2
@@ -350,11 +355,10 @@ void mcfInit(void)
   adc_cis.ADC_TwoSamplingDelay = 0x00;
   ADC_CommonInit(ADC1, &adc_cis);
   ADC_CommonInit(ADC3, &adc_cis);
-
   /**
    * ADC specific settings
    * 
-   * ADC_ContinuousConvMode: Single conversion on trigger
+   * ADC_ContinuousConvMode: continuous conversion on trigger
    * ADC_Resolution: maximum resolution
    * ADC_ExternalTrigConvEvent: TIM1 TRGO event
    * ADC_ExternalTrigEventEdge: on falling edge of tim1 channel4
@@ -365,8 +369,8 @@ void mcfInit(void)
    */
   adc_is.ADC_ContinuousConvMode = ADC_ContinuousConvMode_Enable;
   adc_is.ADC_Resolution = ADC_Resolution_12b;
-  adc_is.ADC_ExternalTrigConvEvent = ADC_ExternalTrigConvEvent_9; // 9 for trigo
-  adc_is.ADC_ExternalTrigEventEdge = ADC_ExternalTrigEventEdge_BothEdge;
+  adc_is.ADC_ExternalTrigConvEvent = ADC_ExternalTrigConvEvent_9; // 9 for trgo
+  adc_is.ADC_ExternalTrigEventEdge = ADC_ExternalTrigEventEdge_FallingEdge;
   // adc_is.ADC_ExternalTrigEventEdge = ADC_ExternalTrigEventEdge_None;
   adc_is.ADC_DataAlign = ADC_DataAlign_Right;
   adc_is.ADC_OverrunMode = DISABLE;
@@ -374,17 +378,14 @@ void mcfInit(void)
   adc_is.ADC_NbrOfRegChannel = 4;
   ADC_Init(ADC1, &adc_is);
   ADC_Init(ADC3, &adc_is);
-
   // Enable voltage regulator
   ADC_VoltageRegulatorCmd(ADC1, ENABLE);
   ADC_VoltageRegulatorCmd(ADC3, ENABLE);
-  ADC_TempSensorCmd(ADC1, ENABLE);
+  ADC_TempSensorCmd(ADC3, ENABLE);
   chThdSleepMicroseconds(20);
-
   // Enable Vrefint channel
   ADC_VrefintCmd(ADC1, ENABLE);
   ADC_VrefintCmd(ADC3, ENABLE);
-
   //calibrate
   ADC_SelectCalibrationMode(ADC1, ADC_CalibrationMode_Single);
   ADC_StartCalibration(ADC1);
@@ -392,7 +393,6 @@ void mcfInit(void)
   ADC_StartCalibration(ADC3);
   while(ADC_GetCalibrationStatus(ADC1) == SET);
   while(ADC_GetCalibrationStatus(ADC3) == SET);
-
   /**
    * Configure the regular channels
    * 
@@ -419,14 +419,13 @@ void mcfInit(void)
   ADC_RegularChannelConfig(ADC3, ADC_Channel_TempSensor, 3, ADC_SampleTime_1Cycles5);
   ADC_RegularChannelConfig(ADC3, ADC_Channel_Vrefint, 4, ADC_SampleTime_1Cycles5);
   ADC_RegularChannelSequencerLengthConfig(ADC3, 4);
-
   /**
    * Enable ADC
    */
   // ADC_ITConfig(ADC1, ADC_IT_EOS, ENABLE);
   ADC_ITConfig(ADC3, ADC_IT_EOS, ENABLE);
-  // nvicEnableVector(ADC1_2_IRQn, 4);
-  nvicEnableVector(ADC3_IRQn, 4);
+  // nvicEnableVector(ADC1_2_IRQn, 2);
+  nvicEnableVector(ADC3_IRQn, 2);
 
   // ADC_ExternalTriggerConfig(ADC1, ADC_ExternalTrigConvEvent_9, ADC_ExternalTrigEventEdge_FallingEdge);
   // ADC_ExternalTriggerConfig(ADC3, ADC_ExternalTrigConvEvent_9, ADC_ExternalTrigEventEdge_FallingEdge);
@@ -499,20 +498,20 @@ static THD_FUNCTION(mcfocMainThread, arg) {
   (void)arg;
   chRegSetThreadName(DEFS_THD_MCFOC_MAIN_NAME);
 
-  // while(true)
-  // {
-  //   // transform
+  while(true)
+  {
+    // transform
     
-  //   // run speed controller
+    // run speed controller
+    runSpeedController();
+    // run current controller
+    runCurrentController();
+    // inverse transform
     
-  //   // run current controller
+    // calculate duties
     
-  //   // inverse transform
-    
-  //   // calculate duties
-    
-  //   // set output
-  // }
+    // set output
+  }
 
   /**
    * @brief      SVM test
@@ -576,6 +575,9 @@ static void dataInit(void)
   mMotParms.J = FOC_MOTOR_DEFAULT_J;
 
   mFOCParms.obsGain = FOC_PARAM_DEFAULT_OBS_GAIN;
+  mFOCParms.obsSpeed_kp = FOC_PARAM_DEFAULT_OBS_SPEED_KP;
+  mFOCParms.obsSpeed_ki = FOC_PARAM_DEFAULT_OBS_SPEED_KI;
+  mFOCParms.obsSpeed_kd = FOC_PARAM_DEFAULT_OBS_SPEED_KD;
   mFOCParms.curr_d_kp = FOC_PARAM_DEFAULT_CURR_D_KP;
   mFOCParms.curr_d_ki = FOC_PARAM_DEFAULT_CURR_D_KI;
   mFOCParms.curr_d_kd = FOC_PARAM_DEFAULT_CURR_D_KD;
@@ -585,6 +587,41 @@ static void dataInit(void)
   mFOCParms.speed_kp = FOC_PARAM_DEFAULT_SPEED_KP;
   mFOCParms.speed_ki = FOC_PARAM_DEFAULT_SPEED_KI;
   mFOCParms.speed_kd = FOC_PARAM_DEFAULT_SPEED_KD;
+
+  mObs.x[0] = 0.0; mObs.x[1] = 0.0;
+  mObs.eta[0] = 0.0; mObs.eta[1] = 0.0;
+  mObs.y[0] = 0.0; mObs.y[1] = 0.0; 
+  mObs.theta = 0.0;
+  mObs.theta_var = 0.0;
+  mObs.omega_m = 0.0;
+  mObs.omega_e = 0.0;
+
+  mCtrl.w_set = 0.0;
+  mCtrl.w_is = 0.0;
+  mCtrl.id_set = 0.0;
+  mCtrl.id_is = 0.0;
+  mCtrl.iq_set = 0.0;
+  mCtrl.iq_is = 0.0;
+  mCtrl.vd_set = 0.0;
+  mCtrl.vq_set = 0.0;
+
+  // PID controllers
+  mObs.speedPID.Kp = mFOCParms.obsSpeed_kp;
+  mObs.speedPID.Ki = mFOCParms.obsSpeed_ki;
+  mObs.speedPID.Kd = mFOCParms.obsSpeed_kd;
+  arm_pid_init_f32(&mObs.speedPID, true);
+  mCtrl.speedPID.Kp = mFOCParms.speed_kp;
+  mCtrl.speedPID.Ki = mFOCParms.speed_ki;
+  mCtrl.speedPID.Kd = mFOCParms.speed_kd;
+  arm_pid_init_f32(&mCtrl.speedPID, true);
+  mCtrl.idPID.Kp = mFOCParms.curr_d_kp;
+  mCtrl.idPID.Ki = mFOCParms.curr_d_ki;
+  mCtrl.idPID.Kd = mFOCParms.curr_d_kd;
+  arm_pid_init_f32(&mCtrl.idPID, true);
+  mCtrl.iqPID.Kp = mFOCParms.curr_q_kp;
+  mCtrl.iqPID.Ki = mFOCParms.curr_q_ki;
+  mCtrl.iqPID.Kd = mFOCParms.curr_q_kd;
+  arm_pid_init_f32(&mCtrl.iqPID, true);
 }
 /**
  * @brief      Calibrates all analog signals
@@ -804,10 +841,10 @@ static void invpark (float* d, float* q, float* theta, float* a, float* b)
  * @param      ib    in: measured i beta
  * @param      dt    in: time delta since last call
  */
-static void runObserver(float *ua, float *ub, float *ia, float *ib, float *dt)
+static void runPositionObserver(float *ua, float *ub, float *ia, float *ib, float *dt)
 {
-  float pos_error;
-  float xp[2];
+  static float pos_error;
+  static float xp[2];
 
   mObs.eta[0] = mObs.x[0] - mMotParms.Ls*(*ia);
   mObs.eta[1] = mObs.x[1] - mMotParms.Ls*(*ib);
@@ -827,14 +864,60 @@ static void runObserver(float *ua, float *ub, float *ia, float *ib, float *dt)
   mObs.theta = utilFastAtan2((mObs.x[1] - mMotParms.Ls*(*ib)), 
     (mObs.x[0] - mMotParms.Ls*(*ia) ));
 }
+/**
+ * @brief      Estimates the rotor speed using a PLL
+ * @note       Based on IEEE 2010 Position Estimator using a Nonlinear Observer
+ *
+ * @param      dt    in: time delta since last call
+ */
+static void runSpeedObserver (float *dt)
+{
+  static float err;
 
+  err = mObs.theta - mObs.theta_var;
+  mObs.omega_e = arm_pid_f32(&mObs.speedPID, err);
+  mObs.theta_var += mObs.omega_e * (*dt);
+  mObs.omega_m = mObs.omega_e * (60.0 / 2.0 / PI / mMotParms.p);
+}
+/**
+ * @brief      Runs the speed controller, calculates id_set and iq_set
+ */
+static void runSpeedController (void)
+{
+  static float err;
+
+  err = mCtrl.w_set - mObs.omega_m;
+  mCtrl.id_set = 0.0;
+  mCtrl.iq_set = arm_pid_f32(&mCtrl.speedPID, err);
+}
+/**
+ * @brief      Runs the current controller. Calculates vd and vq
+ */
+static void runCurrentController (void)
+{
+  static float d_err, q_err;
+
+  d_err = mCtrl.id_set - mCtrl.id_is;
+  q_err = mCtrl.iq_set - mCtrl.iq_is;
+
+  mCtrl.vd_set = arm_pid_f32(&mCtrl.idPID, d_err);
+  mCtrl.vq_set = arm_pid_f32(&mCtrl.iqPID, q_err);
+
+  // mCtrl.vd_set -= mObs.omega_e * mMotParms.Ls;
+  // mCtrl.vq_set += mObs.omega_e * mMotParms.Ls;
+  // mCtrl.vq_set += mObs.omega_e * mMotParms.psi;
+}
+
+/*===========================================================================*/
+/* Interrupt handlers                                                        */
+/*===========================================================================*/
 /**
  * @brief      ADC1_2 IRQ handler
  */
 CH_IRQ_HANDLER(Vector88) {
   CH_IRQ_PROLOGUE();
   ADC_ClearITPendingBit(ADC1, ADC_IT_EOS);
-  ADC_StartConversion(ADC1);
+  ADC1->CR |= ADC_CR_ADSTART;
   // mc_interface_adc_inj_int_handler();
   CH_IRQ_EPILOGUE();
 }
@@ -846,9 +929,11 @@ CH_IRQ_HANDLER(VectorFC) {
   CH_IRQ_PROLOGUE();
   palTogglePad(GPIOE,14);
   ADC_ClearITPendingBit(ADC3, ADC_IT_EOS);
-  ADC_StartConversion(ADC3);
+  ADC3->CR |= ADC_CR_ADSTART;
   // mc_interface_adc_inj_int_handler();
   CH_IRQ_EPILOGUE();
 }
+
+
 
 /** @} */

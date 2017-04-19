@@ -23,6 +23,7 @@
 #include <ctype.h>
 #include <stdlib.h>
 #include <math.h>
+#include "arm_math.h"
 
 /*===========================================================================*/
 /* Module public functions.                                                  */

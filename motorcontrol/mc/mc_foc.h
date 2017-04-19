@@ -15,6 +15,7 @@
 
 #include "ch.h"
 #include "hal.h"
+#include "arm_math.h"
 
 /*===========================================================================*/
 /* Macros				                                                             */
@@ -35,6 +36,9 @@ typedef struct
 typedef struct
 {
   float obsGain;
+  float obsSpeed_kp;
+  float obsSpeed_ki;
+  float obsSpeed_kd;
   float curr_d_kp;
   float curr_d_ki;
   float curr_d_kd;
@@ -48,11 +52,32 @@ typedef struct
 
 typedef struct
 {
+  // position observer
   float x[2];
   float eta[2];
   float y[2];
-  float theta;
+  float theta;  // the estimated position
+  // speed observer
+  float theta_var;
+  float omega_e;  // the estimated electrical speed
+  float omega_m;  // the estimated mechanical speed [rpm]
+  arm_pid_instance_f32 speedPID;
 } mcfObs_t;
+
+typedef struct
+{
+  float w_set;  // [rpm]
+  float w_is;
+  float id_set;
+  float id_is;
+  float iq_set;
+  float iq_is;
+  float vd_set;
+  float vq_set;
+  arm_pid_instance_f32 speedPID;
+  arm_pid_instance_f32 idPID;
+  arm_pid_instance_f32 iqPID;
+} mcfController_t;
 
 /*===========================================================================*/
 /* MC_FOC public functions.                                                  */

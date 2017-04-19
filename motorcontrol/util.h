@@ -19,7 +19,7 @@
 #define TWO_BY_SQRT_3 (1.1547005f)
 #define SQRT_3_BY_2   (0.8660254f)
 #define SQRT_3        (1.7320508f)
-#define PI (3.1415927f)
+// #define PI (3.1415927f) // defined in arm_math
 
 
 /*===========================================================================*/
