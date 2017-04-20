@@ -501,21 +501,23 @@ void mcfDumpData(void)
 static THD_FUNCTION(mcfocMainThread, arg) {
   (void)arg;
   chRegSetThreadName(DEFS_THD_MCFOC_MAIN_NAME);
+  uint16_t dutya, dutyb, dutyc;
 
-  // while(true)
-  // {
-  //   // transform
-    
-  //   // run speed controller
-  //   runSpeedController();
-  //   // run current controller
-  //   runCurrentController();
-  //   // inverse transform
-    
-  //   // calculate duties
-    
-  //   // set output
-  // }
+  while(true)
+  {
+    // transform
+    park(&mCtrl.ia_is, &mCtrl.ib_is, &mObs.theta, &mCtrl.id_is, &mCtrl.iq_is);
+    // run speed controller
+    runSpeedController();
+    // run current controller
+    runCurrentController();
+    // inverse transform
+    invpark(&mCtrl.va_set, &mCtrl.vb_set, &mObs.theta, &mCtrl.va_set, &mCtrl.vb_set);
+    // calculate duties
+    svm(&mCtrl.va_set, &mCtrl.vb_set, &dutya, &dutyb, &dutyc);
+    // set output
+    TIMER_UPDATE_DUTY(dutya, dutyb, dutyc);
+  }
 
   /**
    * @brief      SVM test
@@ -523,26 +525,37 @@ static THD_FUNCTION(mcfocMainThread, arg) {
    * @param[in]  <unnamed>  { parameter_description }
    */
   float t = 0;
-  float freq = 20;
+  float freq = 0.1;
   float alpha, beta, d, q, theta;
   uint16_t da, db, dc;
   d = 0;
-  q = 0.1;
+  q = 0.5;
 
   while (true) {
+
+  palSetPad(GPIOE,14);
+
     theta = 2*PI*freq*(t/1000000); //800ns
     invpark(&d, &q, &theta, &alpha, &beta); // 5.5us
     mCtrl.vd_set = d;
     mCtrl.vq_set = q;
     mCtrl.va_set = alpha;
     mCtrl.vb_set = beta;
+    utils_saturate_vector_2d(&alpha, &beta, SQRT_3_BY_2);
     svm(&alpha, &beta, &da, &db, &dc); // 4.3us
     TIMER_UPDATE_DUTY(da, db, dc);
-    chThdSleepMicroseconds(FOC_THREAD_INTERVAL);
     t += FOC_THREAD_INTERVAL;
     freq += 0.002;
 
-    DBG3("%.3f\r\n", mObs.theta);
+    // svm debug
+    // DBG3("%.3f %.3f ", alpha, beta);
+    // DBG3("%d %d %d\r\n", da, db, dc);
+
+    // observer debug
+    DBG3("%.3f %.3f %.3f\r\n", 2*PI*freq, mObs.omega_e, mObs.theta);
+
+  palClearPad(GPIOE,14);
+    chThdSleepMicroseconds(FOC_THREAD_INTERVAL);
   }
 }
 static THD_FUNCTION(mcfocSecondaryThread, arg)
@@ -613,7 +626,7 @@ static void dataInit(void)
   mObs.omega_m = 0.0;
   mObs.omega_e = 0.0;
 
-  mCtrl.w_set = 0.0;
+  mCtrl.w_set = 120.0;
   mCtrl.w_is = 0.0;
   mCtrl.id_set = 0.0;
   mCtrl.id_is = 0.0;
@@ -666,6 +679,7 @@ static void analogCalibrate(void)
 /**
  * @brief      Calculates the duty cycles based on the input vectors in the
  * clark reference frame
+ * @note       Magnitude must not be larger than sqrt(3)/2, or 0.866
  *
  * @param      a     in: clark alpha component
  * @param      b     in: clark beta component
@@ -676,113 +690,82 @@ static void analogCalibrate(void)
 static void svm (float* a, float* b, uint16_t* da, uint16_t* db, uint16_t* dc)
 {
   uint8_t sector;
-  float ton1, ton2;
+  float pwmHalfPeriod = TIM1->ARR;
 
-  /**
-   * First, decide which sector we're in
-   */
-  if(*b >= 0.0f)
+  float Ta, Tb, T0;
+  float ta, tb, tc;
+
+  float va = *a;
+  float vb = (*b)*ONE_BY_SQRT_3;
+
+  if(fabsf(va) >= fabsf(vb))
   {
-    // top half
-    if(*a >= 0.0f)
+    Ta=fabsf(va)-fabsf(vb); // Segment 1,3,4,6
+    Tb=fabsf(vb)*2;
+    T0=-Ta-Tb; // assuming Ts = 1;
+    if (vb >= 0)
     {
-      // Quadrant I
-      if( *a < (*b * ONE_BY_SQRT_3) )
-        sector = 2;
-      else
+      if (va >= 0)
+      {
+        // sector 1
         sector = 1;
+        tc = (T0/2);
+        tb = (T0/2+Tb);
+        ta = (T0/2+Tb+Ta);
+      }
+      else
+      {
+        // sector 3
+        sector = 3;
+        ta = (T0/2);
+        tc = (T0/2+Ta);
+        tb = (T0/2+Tb+Ta);
+      }
+    }
+    else if (va >= 0)
+    {
+      // sector 6
+      sector = 6;
+      tb = (T0/2);
+      tc = (T0/2+Tb);
+      ta = (T0/2+Tb+Ta);
     }
     else
     {
-      // Quadrant II
-      if( ( -(*a) ) > (*b * ONE_BY_SQRT_3) )
-        sector = 3;
-      else
-        sector = 2;
+      // sector 4
+      sector = 4;
+      ta = (T0/2);
+      tb = (T0/2+Ta);
+      tc = (T0/2+Tb+Ta);
     }
-  }
+  }        
   else
   {
-    // bottom half
-    if(*a >= 0.0f)
+    // Segment 2,5
+    Ta=fabsf(va+vb);
+    Tb=fabsf(va-vb);
+    T0=-Ta-Tb; // assuming Ts = 1;
+    if (vb > 0)
     {
-      // Quadrant IV
-      if( *a < ( (-*b) * ONE_BY_SQRT_3) )
-        sector = 5;
-      else
-        sector = 6;
+      // sector 2
+      sector = 2;
+      tc = (T0/2);
+      ta = (T0/2+Ta);
+      tb = (T0/2+Tb+Ta);
     }
     else
     {
-      // Quadrant III
-      if( *a < (*b * ONE_BY_SQRT_3) )
-        sector = 5;
-      else
-        sector = 4;
+      // sector 5
+      sector = 5;
+      tb = (T0/2);
+      ta = (T0/2+Tb);
+      tc = (T0/2+Tb+Ta);
     }
   }
 
-  /**
-   * Now the sector dependant calculations
-   */
-  // Switch-case is approx. 0.1us faster than if statements
-  switch(sector)
-  {
-    case 1:
-      // Vector on times
-      ton1 = (*a - ONE_BY_SQRT_3 * (*b) ) * FOC_TIM_PERIOD;
-      ton2 = (TWO_BY_SQRT_3 * (*b)) * FOC_TIM_PERIOD;
-      // PWM timings
-      *da = (uint16_t)( (FOC_TIM_PERIOD - ton1 - ton2) / 2);
-      *db = (uint16_t)(*da + ton1);
-      *dc = (uint16_t)(*db + ton2);
-      break;
-    case 2:
-      // Vector on times
-      ton1 = ((*a) + ONE_BY_SQRT_3 * (*b)) * FOC_TIM_PERIOD;
-      ton2 = (-(*a) + ONE_BY_SQRT_3 * (*b)) * FOC_TIM_PERIOD;
-      // PWM timings
-      *db = (uint16_t)((FOC_TIM_PERIOD - ton1 - ton2) / 2);
-      *da = (uint16_t)((*db) + ton2);
-      *dc = (uint16_t)((*da) + ton1);
-      break;
-    case 3:
-      // Vector on times
-      ton1 = (TWO_BY_SQRT_3 * (*b)) * FOC_TIM_PERIOD;
-      ton2 = (-(*a) - ONE_BY_SQRT_3 * (*b)) * FOC_TIM_PERIOD;
-      // PWM timings
-      *db = (uint16_t)((FOC_TIM_PERIOD - ton1 - ton2) / 2);
-      *dc = (uint16_t)((*db) + ton1);
-      *da = (uint16_t)((*dc) + ton2);
-      break;
-    case 4:
-      // Vector on times
-      ton1 = (-(*a) + ONE_BY_SQRT_3 * (*b)) * FOC_TIM_PERIOD;
-      ton2 = (-TWO_BY_SQRT_3 * (*b)) * FOC_TIM_PERIOD;
-      // PWM timings
-      *dc = (uint16_t)((FOC_TIM_PERIOD - ton1 - ton2) / 2);
-      *db = (uint16_t)((*dc) + ton2);
-      *da = (uint16_t)((*db) + ton1);
-      break;
-    case 5:
-      // Vector on times
-      ton1 = (-(*a) - ONE_BY_SQRT_3 * (*b)) * FOC_TIM_PERIOD;
-      ton2 = ((*a) - ONE_BY_SQRT_3 * (*b)) * FOC_TIM_PERIOD;
-      // PWM timings
-      *dc = (uint16_t)((FOC_TIM_PERIOD - ton1 - ton2) / 2);
-      *da = (uint16_t)(*dc + ton1);
-      *db = (uint16_t)(*da + ton2);
-      break;
-    case 6:
-      // Vector on times
-      ton1 = (-TWO_BY_SQRT_3 * (*b)) * FOC_TIM_PERIOD;
-      ton2 = ((*a) + ONE_BY_SQRT_3 * (*b)) * FOC_TIM_PERIOD;
-      // PWM timings
-      *da = (uint16_t)((FOC_TIM_PERIOD - ton1 - ton2) / 2);
-      *dc = (uint16_t)(*da + ton2);
-      *db = (uint16_t)(*dc + ton1);
-      break;
-  }
+  *da = (uint16_t)(pwmHalfPeriod*(ta+0.5));
+  *db = (uint16_t)(pwmHalfPeriod*(tb+0.5));
+  *dc = (uint16_t)(pwmHalfPeriod*(tc+0.5));        
 }
 
 /**
@@ -796,8 +779,8 @@ static void svm (float* a, float* b, uint16_t* da, uint16_t* db, uint16_t* dc)
  */
 static void clark (float* va, float* vb, float* vc, float* a, float* b)
 {
-  *va = 2.0f / 3.0f * (*va - 0.5f*(*vb) - 0.5f*(*vc));
-  *vb = 2.0f / 3.0f * (SQRT_3_BY_2*(*vb) - SQRT_3_BY_2*(*vc));
+  *a = 2.0f / 3.0f * (*va - 0.5f*(*vb) - 0.5f*(*vc));
+  *b = 2.0f / 3.0f * (SQRT_3_BY_2*(*vb) - SQRT_3_BY_2*(*vc));
 }
 /**
  * @brief      Forward park transformation
@@ -966,13 +949,12 @@ CH_IRQ_HANDLER(VectorFC) {
 
   dt = 1.0/((float)FOC_F_SW);
 
-  palTogglePad(GPIOE,14);
-
   mCtrl.ipa_is = ADC_AMP(ADC_CH_CURR_A);
   mCtrl.ipb_is = ADC_AMP(ADC_CH_CURR_B);
   mCtrl.ipc_is = -mCtrl.ipa_is -mCtrl.ipb_is;
   clark(&mCtrl.ipa_is, &mCtrl.ipb_is, &mCtrl.ipc_is, &mCtrl.ia_is, &mCtrl.ib_is);
   runPositionObserver(&dt);
+  runSpeedObserver(&dt);
 
   if(mStoreADC3)
   {

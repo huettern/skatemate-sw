@@ -158,6 +158,34 @@ float utilFastAtan2(float y, float x) {
   }
 }
 
+/**
+ * Truncate the magnitude of a vector.
+ *
+ * @param x   The first component.
+ * @param y   The second component.
+ * @param max The maximum magnitude.
+ *
+ * @return True if saturation happened, false otherwise
+ */
+bool utils_saturate_vector_2d(float *x, float *y, float max) {
+  bool retval = false;
+  float mag = sqrtf(*x * *x + *y * *y);
+  // arm_sqrt_f32(*x * *x + *y * *y, &mag);
+  max = fabsf(max);
+
+  if (mag < 1e-10) {
+    mag = 1e-10;
+  }
+
+  if (mag > max) {
+    const float f = max / mag;
+    *x *= f;
+    *y *= f;
+    retval = true;
+  }
+
+  return retval;
+}
 
 /** @} */
 
