@@ -533,17 +533,12 @@ static THD_FUNCTION(mcfocMainThread, arg) {
   //   // inverse transform
   //   invpark(&mCtrl.vd_set, &mCtrl.vq_set, &mObs.theta, &mCtrl.va_set, &mCtrl.vb_set);
   //   // calculate duties
+  //   utils_saturate_vector_2d(&mCtrl.va_set, &mCtrl.vb_set, SQRT_3_BY_2);
   //   svm(&mCtrl.va_set, &mCtrl.vb_set, &dutya, &dutyb, &dutyc);
   //   // set output
   //   TIMER_UPDATE_DUTY(dutyc, dutyb, dutya);
   //   // delay
   //   chThdSleepMicroseconds(FOC_THREAD_INTERVAL);
-
-
-
-  //   // svm debug
-  //   DBG3("%.3f %.3f ", mCtrl.va_set, mCtrl.vb_set);
-  //   DBG3("%d %d %d\r\n", dutya, dutyb, dutyc);
   // }
 
   /**
@@ -553,22 +548,18 @@ static THD_FUNCTION(mcfocMainThread, arg) {
    */
   float t = 0;
   float freq = 10.0;
-  float alpha, beta, d, q, theta;
+  float theta;
   uint16_t da, db, dc;
-  d = 0;
-  q = 0.5;
+  mCtrl.vd_set = 0;
+  mCtrl.vq_set = 0.5;
   TIMER_UPDATE_DUTY(1500, 1000, 1500);
   while (true) {
 
 
     theta = 2*PI*freq*(t/1000000); //800ns
-    invpark(&d, &q, &theta, &alpha, &beta); // 5.5us
-    mCtrl.vd_set = d;
-    mCtrl.vq_set = q;
-    mCtrl.va_set = alpha;
-    mCtrl.vb_set = beta;
-    utils_saturate_vector_2d(&alpha, &beta, SQRT_3_BY_2);
-    svm(&alpha, &beta, &da, &db, &dc); // 4.3us
+    invpark(&mCtrl.vd_set, &mCtrl.vq_set, &theta, &mCtrl.va_set, &mCtrl.vb_set); // 5.5us
+    utils_saturate_vector_2d(&mCtrl.va_set, &mCtrl.vb_set, SQRT_3_BY_2);
+    svm(&mCtrl.va_set, &mCtrl.vb_set, &da, &db, &dc); // 4.3us
     TIMER_UPDATE_DUTY(dc, db, da);
     t += FOC_THREAD_INTERVAL;
     freq += 0.005;
@@ -614,7 +605,7 @@ static THD_FUNCTION(mcfocSecondaryThread, arg)
     #endif
     #ifdef DEBUG_OBSERVER
     // observer debug
-      DBG3("%.3f %.3f\r\n", mObs.omega_e, mObs.theta);
+      DBG3("%.3f %.3f %.3f %.3f\r\n", mObs.omega_e, mObs.theta, mCtrl.va_set, mCtrl.vb_set);
     #endif
     chThdSleepMilliseconds(1);
   }
