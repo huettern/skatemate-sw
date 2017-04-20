@@ -37,6 +37,7 @@
 // #define DBG2(X, ...) chprintf((BaseSequentialStream *)&SD3, X, ##__VA_ARGS__ )
 #define DBG2(X, ...)
 #define DBG3(X, ...) chprintf((BaseSequentialStream *)&SD3, X, ##__VA_ARGS__ )
+// #define DBG3(X, ...)
 
 
 /*===========================================================================*/

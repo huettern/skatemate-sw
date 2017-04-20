@@ -74,6 +74,15 @@ typedef struct
   float iq_is;
   float vd_set;
   float vq_set;
+  float ia_is;
+  float ib_is;
+  float ia_set;
+  float ib_set;
+  float va_set;
+  float vb_set;
+  float ipa_is;
+  float ipb_is;
+  float ipc_is;
   arm_pid_instance_f32 speedPID;
   arm_pid_instance_f32 idPID;
   arm_pid_instance_f32 iqPID;

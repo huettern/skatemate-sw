@@ -126,6 +126,9 @@ static mcfController_t mCtrl;
 static mcfObs_t mObs;
 
 static volatile uint16_t mADCValue[8]; // raw converted values
+#define ADC_STORE_DEPTH 200
+static volatile uint16_t mADCValueStore[ADC_STORE_DEPTH][8]; // raw converted values
+static volatile uint8_t mStoreADC1, mStoreADC3;
 static float mADCtoPinFactor, mADCtoVoltsFactor, mADCtoAmpsFactor;
 
 /*===========================================================================*/
@@ -159,6 +162,7 @@ static float mADCtoPinFactor, mADCtoVoltsFactor, mADCtoAmpsFactor;
  * @brief      Returns the ADC voltage after the resistor divider
  */
 #define ADC_VOLT(ch) ( (float)mADCValue[ch] * mADCtoVoltsFactor)
+#define ADC_STORE_VOLT(i, ch) ( (float)mADCValueStore[i][ch] * mADCtoVoltsFactor)
 /**
  * @brief      Returns the current in the shunt resister
  */
@@ -181,7 +185,7 @@ static void park (float* a, float* b, float* theta, float* d, float* q );
 static void invclark (float* a, float* b, float* va, float* vb, float* vc);
 static void invpark (float* d, float* q, float* theta, float* a, float* b);
 
-static void runPositionObserver(float *ua, float *ub, float *ia, float *ib, float *dt);
+static void runPositionObserver(float *dt);
 static void runSpeedObserver (float *dt);
 static void runSpeedController (void);
 static void runCurrentController (void);
@@ -381,7 +385,7 @@ void mcfInit(void)
   // Enable voltage regulator
   ADC_VoltageRegulatorCmd(ADC1, ENABLE);
   ADC_VoltageRegulatorCmd(ADC3, ENABLE);
-  ADC_TempSensorCmd(ADC3, ENABLE);
+  ADC_TempSensorCmd(ADC1, ENABLE);
   chThdSleepMicroseconds(20);
   // Enable Vrefint channel
   ADC_VrefintCmd(ADC1, ENABLE);
@@ -422,9 +426,9 @@ void mcfInit(void)
   /**
    * Enable ADC
    */
-  // ADC_ITConfig(ADC1, ADC_IT_EOS, ENABLE);
+  ADC_ITConfig(ADC1, ADC_IT_EOS, ENABLE);
   ADC_ITConfig(ADC3, ADC_IT_EOS, ENABLE);
-  // nvicEnableVector(ADC1_2_IRQn, 2);
+  nvicEnableVector(ADC1_2_IRQn, 2);
   nvicEnableVector(ADC3_IRQn, 2);
 
   // ADC_ExternalTriggerConfig(ADC1, ADC_ExternalTrigConvEvent_9, ADC_ExternalTrigEventEdge_FallingEdge);
@@ -498,20 +502,20 @@ static THD_FUNCTION(mcfocMainThread, arg) {
   (void)arg;
   chRegSetThreadName(DEFS_THD_MCFOC_MAIN_NAME);
 
-  while(true)
-  {
-    // transform
+  // while(true)
+  // {
+  //   // transform
     
-    // run speed controller
-    runSpeedController();
-    // run current controller
-    runCurrentController();
-    // inverse transform
+  //   // run speed controller
+  //   runSpeedController();
+  //   // run current controller
+  //   runCurrentController();
+  //   // inverse transform
     
-    // calculate duties
+  //   // calculate duties
     
-    // set output
-  }
+  //   // set output
+  // }
 
   /**
    * @brief      SVM test
@@ -519,20 +523,26 @@ static THD_FUNCTION(mcfocMainThread, arg) {
    * @param[in]  <unnamed>  { parameter_description }
    */
   float t = 0;
-  float freq = 50;
+  float freq = 20;
   float alpha, beta, d, q, theta;
   uint16_t da, db, dc;
   d = 0;
-  q = 0.5;
+  q = 0.1;
 
   while (true) {
     theta = 2*PI*freq*(t/1000000); //800ns
     invpark(&d, &q, &theta, &alpha, &beta); // 5.5us
+    mCtrl.vd_set = d;
+    mCtrl.vq_set = q;
+    mCtrl.va_set = alpha;
+    mCtrl.vb_set = beta;
     svm(&alpha, &beta, &da, &db, &dc); // 4.3us
     TIMER_UPDATE_DUTY(da, db, dc);
     chThdSleepMicroseconds(FOC_THREAD_INTERVAL);
     t += FOC_THREAD_INTERVAL;
     freq += 0.002;
+
+    DBG3("%.3f\r\n", mObs.theta);
   }
 }
 static THD_FUNCTION(mcfocSecondaryThread, arg)
@@ -541,27 +551,34 @@ static THD_FUNCTION(mcfocSecondaryThread, arg)
   chRegSetThreadName(DEFS_THD_MCFOC_SECOND_NAME);
   static float ph_a, ph_b, ph_c, suppl, curr_a, curr_b;
   static uint64_t x = 0;
+  uint16_t i;
   // utlmEnable(true);
+  
   while(true)
   {
-    ph_a = ADC_VOLT(ADC_CH_PH_A);
-    ph_b = ADC_VOLT(ADC_CH_PH_B);
-    ph_c = ADC_VOLT(ADC_CH_PH_C);
-    suppl = ADC_VOLT(ADC_CH_SUPPL);
-    curr_a = ADC_VOLT(ADC_CH_CURR_A);
-    curr_b = ADC_VOLT(ADC_CH_CURR_B);
-    // utlmSend(0, 1, &x, &ph_a);
-    // utlmSend(1, 1, &x, &ph_b);
-    // utlmSend(2, 1, &x, &ph_c);
-    // utlmSend(3, 1, &x, &suppl);
-    // utlmSend(4, 1, &x, &curr_a);
-    // utlmSend(5, 1, &x, &curr_b);
-    DBG3("%d %.3f %.3f %.3f %.3f %.3f %.3f ",
-      x, ph_a, ph_b, ph_c, suppl, curr_a, curr_b);
-    DBG3("\r\n");
-    x+=10;
-    chThdSleepMilliseconds(10);
+    chThdSleepMilliseconds(1000);
+    mStoreADC1 = 1;
+    mStoreADC3 = 1;
+    chThdSleepMilliseconds(1);
+    x = 0;
+    while(mStoreADC1 | mStoreADC3) chThdSleepMilliseconds(1);
+    for(i = 0; i < ADC_STORE_DEPTH; i++)
+    {
+      ph_a = ADC_STORE_VOLT(i, ADC_CH_PH_A);
+      ph_b = ADC_STORE_VOLT(i, ADC_CH_PH_B);
+      ph_c = ADC_STORE_VOLT(i, ADC_CH_PH_C);
+      suppl = ADC_STORE_VOLT(i, ADC_CH_SUPPL);
+      curr_a = ADC_STORE_VOLT(i, ADC_CH_CURR_A);
+      curr_b = ADC_STORE_VOLT(i, ADC_CH_CURR_B);
+
+      // DBG3("%d %.3f %.3f %.3f %.3f %.3f %.3f ",
+      //   i, ph_a, ph_b, ph_c, suppl, curr_a, curr_b);
+      // DBG3("\r\n");
+
+      chThdSleepMilliseconds(1);
+    }  
   }
+
 }
 /**
  * @brief      Initializes the static data with default values
@@ -841,16 +858,16 @@ static void invpark (float* d, float* q, float* theta, float* a, float* b)
  * @param      ib    in: measured i beta
  * @param      dt    in: time delta since last call
  */
-static void runPositionObserver(float *ua, float *ub, float *ia, float *ib, float *dt)
+static void runPositionObserver(float *dt)
 {
   static float pos_error;
   static float xp[2];
 
-  mObs.eta[0] = mObs.x[0] - mMotParms.Ls*(*ia);
-  mObs.eta[1] = mObs.x[1] - mMotParms.Ls*(*ib);
+  mObs.eta[0] = mObs.x[0] - mMotParms.Ls*(mCtrl.ia_is);
+  mObs.eta[1] = mObs.x[1] - mMotParms.Ls*(mCtrl.ib_is);
 
-  mObs.y[0] = -mMotParms.Rs*(*ia) + (*ua);
-  mObs.y[1] = -mMotParms.Rs*(*ib) + (*ub);
+  mObs.y[0] = -mMotParms.Rs*(mCtrl.ia_is) + (mCtrl.va_set);
+  mObs.y[1] = -mMotParms.Rs*(mCtrl.ib_is) + (mCtrl.vb_set);
 
   pos_error =  mMotParms.psi*mMotParms.psi - 
     (mObs.eta[0]*mObs.eta[0] + mObs.eta[1]*mObs.eta[1]);
@@ -861,8 +878,8 @@ static void runPositionObserver(float *ua, float *ub, float *ia, float *ib, floa
   mObs.x[0] += xp[0]*(*dt);
   mObs.x[1] += xp[1]*(*dt);
 
-  mObs.theta = utilFastAtan2((mObs.x[1] - mMotParms.Ls*(*ib)), 
-    (mObs.x[0] - mMotParms.Ls*(*ia) ));
+  mObs.theta = utilFastAtan2((mObs.x[1] - mMotParms.Ls*(mCtrl.ib_is)), 
+    (mObs.x[0] - mMotParms.Ls*(mCtrl.ia_is) ));
 }
 /**
  * @brief      Estimates the rotor speed using a PLL
@@ -915,9 +932,23 @@ static void runCurrentController (void)
  * @brief      ADC1_2 IRQ handler
  */
 CH_IRQ_HANDLER(Vector88) {
+  static uint16_t ctr = 0;
   CH_IRQ_PROLOGUE();
   ADC_ClearITPendingBit(ADC1, ADC_IT_EOS);
   ADC1->CR |= ADC_CR_ADSTART;
+
+  if(mStoreADC1)
+  {
+    // copy to store reg
+    mADCValueStore[ctr][0] = mADCValue[0];
+    mADCValueStore[ctr][1] = mADCValue[1];
+    mADCValueStore[ctr][2] = mADCValue[2];
+    mADCValueStore[ctr][3] = mADCValue[3];
+    ctr++;
+    if(ctr >= ADC_STORE_DEPTH) mStoreADC1 = 0;
+    ctr %= ADC_STORE_DEPTH;
+  }
+
   // mc_interface_adc_inj_int_handler();
   CH_IRQ_EPILOGUE();
 }
@@ -926,10 +957,35 @@ CH_IRQ_HANDLER(Vector88) {
  * @brief      ADC IRQ handler
  */
 CH_IRQ_HANDLER(VectorFC) {
+  static uint16_t ctr = 0;
+  static float dt = 0;
+
   CH_IRQ_PROLOGUE();
-  palTogglePad(GPIOE,14);
   ADC_ClearITPendingBit(ADC3, ADC_IT_EOS);
   ADC3->CR |= ADC_CR_ADSTART;
+
+  dt = 1.0/((float)FOC_F_SW);
+
+  palTogglePad(GPIOE,14);
+
+  mCtrl.ipa_is = ADC_AMP(ADC_CH_CURR_A);
+  mCtrl.ipb_is = ADC_AMP(ADC_CH_CURR_B);
+  mCtrl.ipc_is = -mCtrl.ipa_is -mCtrl.ipb_is;
+  clark(&mCtrl.ipa_is, &mCtrl.ipb_is, &mCtrl.ipc_is, &mCtrl.ia_is, &mCtrl.ib_is);
+  runPositionObserver(&dt);
+
+  if(mStoreADC3)
+  {
+    // copy to store reg
+    mADCValueStore[ctr][4] = mADCValue[4];
+    mADCValueStore[ctr][5] = mADCValue[5];
+    mADCValueStore[ctr][6] = mADCValue[6];
+    mADCValueStore[ctr][7] = mADCValue[7];
+    ctr++;
+    if(ctr >= ADC_STORE_DEPTH) mStoreADC3 = 0;
+    ctr %= ADC_STORE_DEPTH;
+  }
+
   // mc_interface_adc_inj_int_handler();
   CH_IRQ_EPILOGUE();
 }
