@@ -41,6 +41,14 @@
 #include "drv8301.h"
 
 /*===========================================================================*/
+/* DEBUG                                                                */
+/*===========================================================================*/
+// #define DEBUG_ADC
+// #define DEBUG_SVM
+// #define DEBUG_OBSERVER
+
+
+/*===========================================================================*/
 /* settings                                                                */
 /*===========================================================================*/
 /**
@@ -121,7 +129,7 @@ static mcfController_t mCtrl;
 static mcfObs_t mObs;
 
 static volatile uint16_t mADCValue[8]; // raw converted values
-#define ADC_STORE_DEPTH 200
+#define ADC_STORE_DEPTH 500
 static volatile uint16_t mADCValueStore[ADC_STORE_DEPTH][8]; // raw converted values
 static volatile uint8_t mStoreADC1, mStoreADC3;
 static float mADCtoPinFactor, mADCtoVoltsFactor, mADCtoAmpsFactor;
@@ -338,8 +346,8 @@ void mcfInit(void)
   // Clock
   RCC_AHBPeriphClockCmd(RCC_AHBPeriph_ADC12, ENABLE);
   RCC_AHBPeriphClockCmd(RCC_AHBPeriph_ADC34, ENABLE); 
-  RCC_ADCCLKConfig(RCC_ADC12PLLCLK_Div10); 
-  RCC_ADCCLKConfig(RCC_ADC34PLLCLK_Div10); 
+  RCC_ADCCLKConfig(RCC_ADC12PLLCLK_Div2); 
+  RCC_ADCCLKConfig(RCC_ADC34PLLCLK_Div2); 
   // GPIOs (SOx pins are done in the drv8301 module)
   palSetPadMode(GPIOA, 0, PAL_MODE_INPUT_ANALOG);
   palSetPadMode(GPIOA, 1, PAL_MODE_INPUT_ANALOG);
@@ -451,7 +459,7 @@ void mcfInit(void)
   TIM_CtrlPWMOutputs(TIM1, ENABLE);
 
   // Trigger for ADC
-  TIM_SelectOutputTrigger(TIM1, TIM_TRGOSource_OC4Ref);
+  TIM_SelectOutputTrigger(TIM1, TIM_TRGOSource_OC3Ref);
 
   analogCalibrate();
 
@@ -518,7 +526,7 @@ static THD_FUNCTION(mcfocMainThread, arg) {
   //   // calculate duties
   //   svm(&mCtrl.va_set, &mCtrl.vb_set, &dutya, &dutyb, &dutyc);
   //   // set output
-  //   TIMER_UPDATE_DUTY(dutya, dutyb, dutyc);
+  //   TIMER_UPDATE_DUTY(dutyc, dutyb, dutya);
   //   // delay
   //   chThdSleepMicroseconds(FOC_THREAD_INTERVAL);
 
@@ -540,31 +548,21 @@ static THD_FUNCTION(mcfocMainThread, arg) {
   uint16_t da, db, dc;
   d = 0;
   q = 0.5;
-
+  TIMER_UPDATE_DUTY(1500, 1000, 10);
   while (true) {
 
-  palSetPad(GPIOE,14);
 
-    theta = 2*PI*freq*(t/1000000); //800ns
-    invpark(&d, &q, &theta, &alpha, &beta); // 5.5us
-    mCtrl.vd_set = d;
-    mCtrl.vq_set = q;
-    mCtrl.va_set = alpha;
-    mCtrl.vb_set = beta;
-    utils_saturate_vector_2d(&alpha, &beta, SQRT_3_BY_2);
-    svm(&alpha, &beta, &da, &db, &dc); // 4.3us
-    TIMER_UPDATE_DUTY(da, db, dc);
-    t += FOC_THREAD_INTERVAL;
-    // freq += 0.002;
+    // theta = 2*PI*freq*(t/1000000); //800ns
+    // invpark(&d, &q, &theta, &alpha, &beta); // 5.5us
+    // mCtrl.vd_set = d;
+    // mCtrl.vq_set = q;
+    // mCtrl.va_set = alpha;
+    // mCtrl.vb_set = beta;
+    // utils_saturate_vector_2d(&alpha, &beta, SQRT_3_BY_2);
+    // svm(&alpha, &beta, &da, &db, &dc); // 4.3us
+    // TIMER_UPDATE_DUTY(dc, db, da);
+    // t += FOC_THREAD_INTERVAL;
 
-    // svm debug
-    // DBG3("%.3f %.3f ", alpha, beta);
-    // DBG3("%d %d %d\r\n", da, db, dc);
-
-    // observer debug
-    // DBG3("%.3f %.3f %.3f\r\n", freq, mObs.omega_e, mObs.theta);
-
-  palClearPad(GPIOE,14);
     chThdSleepMicroseconds(FOC_THREAD_INTERVAL);
   }
 }
@@ -573,33 +571,42 @@ static THD_FUNCTION(mcfocSecondaryThread, arg)
   (void)arg;
   chRegSetThreadName(DEFS_THD_MCFOC_SECOND_NAME);
   static float ph_a, ph_b, ph_c, suppl, curr_a, curr_b;
-  static uint64_t x = 0;
   uint16_t i;
   // utlmEnable(true);
   
   while(true)
   {
-    chThdSleepMilliseconds(1000);
-    mStoreADC1 = 1;
-    mStoreADC3 = 1;
-    chThdSleepMilliseconds(1);
-    x = 0;
-    while(mStoreADC1 | mStoreADC3) chThdSleepMilliseconds(1);
-    for(i = 0; i < ADC_STORE_DEPTH; i++)
-    {
-      ph_a = ADC_STORE_VOLT(i, ADC_CH_PH_A);
-      ph_b = ADC_STORE_VOLT(i, ADC_CH_PH_B);
-      ph_c = ADC_STORE_VOLT(i, ADC_CH_PH_C);
-      suppl = ADC_STORE_VOLT(i, ADC_CH_SUPPL);
-      curr_a = ADC_STORE_VOLT(i, ADC_CH_CURR_A);
-      curr_b = ADC_STORE_VOLT(i, ADC_CH_CURR_B);
-
-      DBG3("%d %.3f %.3f %.3f %.3f %.3f %.3f ",
-        i, ph_a, ph_b, ph_c, suppl, curr_a, curr_b);
-      DBG3("\r\n");
-
+    #ifdef DEBUG_ADC
+      chThdSleepMilliseconds(5000);
+      mStoreADC1 = 1;
+      mStoreADC3 = 1;
       chThdSleepMilliseconds(1);
-    }  
+      while(mStoreADC1 | mStoreADC3) chThdSleepMilliseconds(1);
+      for(i = 0; i < ADC_STORE_DEPTH; i++)
+      {
+        ph_a = ADC_STORE_VOLT(i, ADC_CH_PH_A);
+        ph_b = ADC_STORE_VOLT(i, ADC_CH_PH_B);
+        ph_c = ADC_STORE_VOLT(i, ADC_CH_PH_C);
+        suppl = ADC_STORE_VOLT(i, ADC_CH_SUPPL);
+        curr_a = ADC_STORE_VOLT(i, ADC_CH_CURR_A);
+        curr_b = ADC_STORE_VOLT(i, ADC_CH_CURR_B);
+
+        DBG3("%d %.3f %.3f %.3f %.3f %.3f %.3f ",
+          i, ph_a, ph_b, ph_c, suppl, curr_a, curr_b);
+        DBG3("\r\n");
+
+        chThdSleepMilliseconds(1);
+      }  
+    #endif
+    #ifdef DEBUG_SVM
+      // svm debug
+      DBG3("%.3f %.3f %d %d %d\r\n", alpha, beta, da, db, dc);
+    #endif
+    #ifdef DEBUG_OBSERVER
+    // observer debug
+      DBG3("%.3f %.3f\r\n", mObs.omega_e, mObs.theta);
+    #endif
+    chThdSleepMilliseconds(1);
   }
 
 }
@@ -958,26 +965,30 @@ CH_IRQ_HANDLER(VectorFC) {
   ADC_ClearITPendingBit(ADC3, ADC_IT_EOS);
   ADC3->CR |= ADC_CR_ADSTART;
 
-  dt = 1.0/((float)FOC_F_SW);
+palTogglePad(GPIOE,14);
 
-  mCtrl.ipa_is = ADC_AMP(ADC_CH_CURR_A);
-  mCtrl.ipb_is = ADC_AMP(ADC_CH_CURR_B);
-  mCtrl.ipc_is = -mCtrl.ipa_is -mCtrl.ipb_is;
-  clark(&mCtrl.ipa_is, &mCtrl.ipb_is, &mCtrl.ipc_is, &mCtrl.ia_is, &mCtrl.ib_is);
-  runPositionObserver(&dt);
-  runSpeedObserver(&dt);
+// palSetPad(GPIOE,14);
+//   dt = 1.0/((float)FOC_F_SW);
 
-  if(mStoreADC3)
-  {
-    // copy to store reg
-    mADCValueStore[ctr][4] = mADCValue[4];
-    mADCValueStore[ctr][5] = mADCValue[5];
-    mADCValueStore[ctr][6] = mADCValue[6];
-    mADCValueStore[ctr][7] = mADCValue[7];
-    ctr++;
-    if(ctr >= ADC_STORE_DEPTH) mStoreADC3 = 0;
-    ctr %= ADC_STORE_DEPTH;
-  }
+//   mCtrl.ipa_is = ADC_AMP(ADC_CH_CURR_A);
+//   mCtrl.ipb_is = ADC_AMP(ADC_CH_CURR_B);
+//   mCtrl.ipc_is = -mCtrl.ipa_is -mCtrl.ipb_is;
+//   clark(&mCtrl.ipa_is, &mCtrl.ipb_is, &mCtrl.ipc_is, &mCtrl.ia_is, &mCtrl.ib_is);
+//   runPositionObserver(&dt);
+//   runSpeedObserver(&dt);
+
+//   if(mStoreADC3)
+//   {
+//     // copy to store reg
+//     mADCValueStore[ctr][4] = mADCValue[4];
+//     mADCValueStore[ctr][5] = mADCValue[5];
+//     mADCValueStore[ctr][6] = mADCValue[6];
+//     mADCValueStore[ctr][7] = mADCValue[7];
+//     ctr++;
+//     if(ctr >= ADC_STORE_DEPTH) mStoreADC3 = 0;
+//     ctr %= ADC_STORE_DEPTH;
+//   }
+// palClearPad(GPIOE,14);
 
   // mc_interface_adc_inj_int_handler();
   CH_IRQ_EPILOGUE();
