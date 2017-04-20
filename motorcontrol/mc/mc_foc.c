@@ -346,8 +346,8 @@ void mcfInit(void)
   // Clock
   RCC_AHBPeriphClockCmd(RCC_AHBPeriph_ADC12, ENABLE);
   RCC_AHBPeriphClockCmd(RCC_AHBPeriph_ADC34, ENABLE); 
-  RCC_ADCCLKConfig(RCC_ADC12PLLCLK_Div2); 
-  RCC_ADCCLKConfig(RCC_ADC34PLLCLK_Div2); 
+  RCC_ADCCLKConfig(RCC_ADC12PLLCLK_Div10); 
+  RCC_ADCCLKConfig(RCC_ADC34PLLCLK_Div10); 
   // GPIOs (SOx pins are done in the drv8301 module)
   palSetPadMode(GPIOA, 0, PAL_MODE_INPUT_ANALOG);
   palSetPadMode(GPIOA, 1, PAL_MODE_INPUT_ANALOG);
@@ -459,7 +459,7 @@ void mcfInit(void)
   TIM_CtrlPWMOutputs(TIM1, ENABLE);
 
   // Trigger for ADC
-  TIM_SelectOutputTrigger(TIM1, TIM_TRGOSource_OC3Ref);
+  TIM_SelectOutputTrigger(TIM1, TIM_TRGOSource_OC4Ref);
 
   analogCalibrate();
 
