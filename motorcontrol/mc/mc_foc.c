@@ -45,8 +45,7 @@
 /*===========================================================================*/
 // #define DEBUG_ADC
 // #define DEBUG_SVM
-// #define DEBUG_OBSERVER
-
+#define DEBUG_OBSERVER
 
 /*===========================================================================*/
 /* settings                                                                */
@@ -344,15 +343,19 @@ void mcfInit(void)
 
   /******* ADC *******/  
   // Clock
+  RCC_AHBPeriphClockCmd(RCC_AHBPeriph_DMA2, ENABLE);
   RCC_AHBPeriphClockCmd(RCC_AHBPeriph_ADC12, ENABLE);
   RCC_AHBPeriphClockCmd(RCC_AHBPeriph_ADC34, ENABLE); 
+
   RCC_ADCCLKConfig(RCC_ADC12PLLCLK_Div10); 
   RCC_ADCCLKConfig(RCC_ADC34PLLCLK_Div10); 
+
   // GPIOs (SOx pins are done in the drv8301 module)
   palSetPadMode(GPIOA, 0, PAL_MODE_INPUT_ANALOG);
   palSetPadMode(GPIOA, 1, PAL_MODE_INPUT_ANALOG);
   palSetPadMode(GPIOA, 2, PAL_MODE_INPUT_ANALOG);
   palSetPadMode(GPIOA, 3, PAL_MODE_INPUT_ANALOG);
+
   /**
    * ADC_Mode: ADCs 1/2 and 3/4 are working independant
    * ADC_Clock: Synchronous clock mode divided by 2 HCLK/2
@@ -367,6 +370,7 @@ void mcfInit(void)
   adc_cis.ADC_TwoSamplingDelay = 0x00;
   ADC_CommonInit(ADC1, &adc_cis);
   ADC_CommonInit(ADC3, &adc_cis);
+
   /**
    * ADC specific settings
    * 
@@ -390,14 +394,17 @@ void mcfInit(void)
   adc_is.ADC_NbrOfRegChannel = 4;
   ADC_Init(ADC1, &adc_is);
   ADC_Init(ADC3, &adc_is);
+
   // Enable voltage regulator
   ADC_VoltageRegulatorCmd(ADC1, ENABLE);
   ADC_VoltageRegulatorCmd(ADC3, ENABLE);
   ADC_TempSensorCmd(ADC1, ENABLE);
   chThdSleepMicroseconds(20);
+
   // Enable Vrefint channel
   ADC_VrefintCmd(ADC1, ENABLE);
   ADC_VrefintCmd(ADC3, ENABLE);
+
   //calibrate
   ADC_SelectCalibrationMode(ADC1, ADC_CalibrationMode_Single);
   ADC_StartCalibration(ADC1);
@@ -405,6 +412,7 @@ void mcfInit(void)
   ADC_StartCalibration(ADC3);
   while(ADC_GetCalibrationStatus(ADC1) == SET);
   while(ADC_GetCalibrationStatus(ADC3) == SET);
+
   /**
    * Configure the regular channels
    * 
@@ -431,13 +439,14 @@ void mcfInit(void)
   ADC_RegularChannelConfig(ADC3, ADC_Channel_TempSensor, 3, ADC_SampleTime_1Cycles5);
   ADC_RegularChannelConfig(ADC3, ADC_Channel_Vrefint, 4, ADC_SampleTime_1Cycles5);
   ADC_RegularChannelSequencerLengthConfig(ADC3, 4);
+
   /**
    * Enable ADC
    */
   ADC_ITConfig(ADC1, ADC_IT_EOS, ENABLE);
   ADC_ITConfig(ADC3, ADC_IT_EOS, ENABLE);
-  nvicEnableVector(ADC1_2_IRQn, 2);
-  nvicEnableVector(ADC3_IRQn, 2);
+  nvicEnableVector(ADC1_2_IRQn, 8);
+  nvicEnableVector(ADC3_IRQn, 2); // Higher prio to current sampling
 
   // ADC_ExternalTriggerConfig(ADC1, ADC_ExternalTrigConvEvent_9, ADC_ExternalTrigEventEdge_FallingEdge);
   // ADC_ExternalTriggerConfig(ADC3, ADC_ExternalTrigConvEvent_9, ADC_ExternalTrigEventEdge_FallingEdge);
@@ -543,25 +552,26 @@ static THD_FUNCTION(mcfocMainThread, arg) {
    * @param[in]  <unnamed>  { parameter_description }
    */
   float t = 0;
-  float freq = 200.0;
+  float freq = 10.0;
   float alpha, beta, d, q, theta;
   uint16_t da, db, dc;
   d = 0;
   q = 0.5;
-  TIMER_UPDATE_DUTY(1500, 1000, 10);
+  TIMER_UPDATE_DUTY(1500, 1000, 1500);
   while (true) {
 
 
-    // theta = 2*PI*freq*(t/1000000); //800ns
-    // invpark(&d, &q, &theta, &alpha, &beta); // 5.5us
-    // mCtrl.vd_set = d;
-    // mCtrl.vq_set = q;
-    // mCtrl.va_set = alpha;
-    // mCtrl.vb_set = beta;
-    // utils_saturate_vector_2d(&alpha, &beta, SQRT_3_BY_2);
-    // svm(&alpha, &beta, &da, &db, &dc); // 4.3us
-    // TIMER_UPDATE_DUTY(dc, db, da);
-    // t += FOC_THREAD_INTERVAL;
+    theta = 2*PI*freq*(t/1000000); //800ns
+    invpark(&d, &q, &theta, &alpha, &beta); // 5.5us
+    mCtrl.vd_set = d;
+    mCtrl.vq_set = q;
+    mCtrl.va_set = alpha;
+    mCtrl.vb_set = beta;
+    utils_saturate_vector_2d(&alpha, &beta, SQRT_3_BY_2);
+    svm(&alpha, &beta, &da, &db, &dc); // 4.3us
+    TIMER_UPDATE_DUTY(dc, db, da);
+    t += FOC_THREAD_INTERVAL;
+    freq += 0.005;
 
     chThdSleepMicroseconds(FOC_THREAD_INTERVAL);
   }
@@ -955,7 +965,7 @@ CH_IRQ_HANDLER(Vector88) {
 }
 
 /**
- * @brief      ADC IRQ handler
+ * @brief      ADC3 IRQ handler
  */
 CH_IRQ_HANDLER(VectorFC) {
   static uint16_t ctr = 0;
@@ -965,30 +975,30 @@ CH_IRQ_HANDLER(VectorFC) {
   ADC_ClearITPendingBit(ADC3, ADC_IT_EOS);
   ADC3->CR |= ADC_CR_ADSTART;
 
-palTogglePad(GPIOE,14);
+//palTogglePad(GPIOE,14);
 
-// palSetPad(GPIOE,14);
-//   dt = 1.0/((float)FOC_F_SW);
+palSetPad(GPIOE,14);
+  dt = 1.0/((float)FOC_F_SW);
 
-//   mCtrl.ipa_is = ADC_AMP(ADC_CH_CURR_A);
-//   mCtrl.ipb_is = ADC_AMP(ADC_CH_CURR_B);
-//   mCtrl.ipc_is = -mCtrl.ipa_is -mCtrl.ipb_is;
-//   clark(&mCtrl.ipa_is, &mCtrl.ipb_is, &mCtrl.ipc_is, &mCtrl.ia_is, &mCtrl.ib_is);
-//   runPositionObserver(&dt);
-//   runSpeedObserver(&dt);
+  mCtrl.ipa_is = ADC_AMP(ADC_CH_CURR_A);
+  mCtrl.ipb_is = ADC_AMP(ADC_CH_CURR_B);
+  mCtrl.ipc_is = -mCtrl.ipa_is -mCtrl.ipb_is;
+  clark(&mCtrl.ipa_is, &mCtrl.ipb_is, &mCtrl.ipc_is, &mCtrl.ia_is, &mCtrl.ib_is);
+  runPositionObserver(&dt);
+  runSpeedObserver(&dt);
 
-//   if(mStoreADC3)
-//   {
-//     // copy to store reg
-//     mADCValueStore[ctr][4] = mADCValue[4];
-//     mADCValueStore[ctr][5] = mADCValue[5];
-//     mADCValueStore[ctr][6] = mADCValue[6];
-//     mADCValueStore[ctr][7] = mADCValue[7];
-//     ctr++;
-//     if(ctr >= ADC_STORE_DEPTH) mStoreADC3 = 0;
-//     ctr %= ADC_STORE_DEPTH;
-//   }
-// palClearPad(GPIOE,14);
+  if(mStoreADC3)
+  {
+    // copy to store reg
+    mADCValueStore[ctr][4] = mADCValue[4];
+    mADCValueStore[ctr][5] = mADCValue[5];
+    mADCValueStore[ctr][6] = mADCValue[6];
+    mADCValueStore[ctr][7] = mADCValue[7];
+    ctr++;
+    if(ctr >= ADC_STORE_DEPTH) mStoreADC3 = 0;
+    ctr %= ADC_STORE_DEPTH;
+  }
+palClearPad(GPIOE,14);
 
   // mc_interface_adc_inj_int_handler();
   CH_IRQ_EPILOGUE();
