@@ -53,11 +53,6 @@
  */
 #define FOC_PWM_DEADTIME_CYCLES 0 // cycles
 /**
- * Duty cycle for TIM1 Channel 4 set to maximum to get a falling edge in the
- * middle of a Gate low output sequence for current and voltage sensing
- */
-#define FOC_TIM1_OC4_VALUE (SYSTEM_CORE_CLOCK / FOC_F_SW) - 1
-/**
  * How fast the control thread should run
  */
 #define FOC_THREAD_INTERVAL 1000 // us
@@ -153,7 +148,12 @@ static float mADCtoPinFactor, mADCtoVoltsFactor, mADCtoAmpsFactor;
 /**
  * Period, the timer should run on. Calculated by Core clock and FOC_F_SW
  */
-#define FOC_TIM_PERIOD SYSTEM_CORE_CLOCK / FOC_F_SW
+#define FOC_TIM_PERIOD SYSTEM_CORE_CLOCK / FOC_F_SW / 2
+/**
+ * Duty cycle for TIM1 Channel 4 set to maximum to get a falling edge in the
+ * middle of a Gate low output sequence for current and voltage sensing
+ */
+#define FOC_TIM1_OC4_VALUE FOC_TIM_PERIOD - 1
 /**
  * @brief      Returns the ADC voltage on the pin
  */
@@ -503,21 +503,31 @@ static THD_FUNCTION(mcfocMainThread, arg) {
   chRegSetThreadName(DEFS_THD_MCFOC_MAIN_NAME);
   uint16_t dutya, dutyb, dutyc;
 
-  while(true)
-  {
-    // transform
-    park(&mCtrl.ia_is, &mCtrl.ib_is, &mObs.theta, &mCtrl.id_is, &mCtrl.iq_is);
-    // run speed controller
-    runSpeedController();
-    // run current controller
-    runCurrentController();
-    // inverse transform
-    invpark(&mCtrl.va_set, &mCtrl.vb_set, &mObs.theta, &mCtrl.va_set, &mCtrl.vb_set);
-    // calculate duties
-    svm(&mCtrl.va_set, &mCtrl.vb_set, &dutya, &dutyb, &dutyc);
-    // set output
-    TIMER_UPDATE_DUTY(dutya, dutyb, dutyc);
-  }
+  // while(true)
+  // {
+  //   // transform
+  //   park(&mCtrl.ia_is, &mCtrl.ib_is, &mObs.theta, &mCtrl.id_is, &mCtrl.iq_is);
+  //   // run speed controller
+  //   // runSpeedController();
+  //   mCtrl.id_set = 0.0;
+  //   mCtrl.iq_set = 0.01;
+  //   // run current controller
+  //   runCurrentController();
+  //   // inverse transform
+  //   invpark(&mCtrl.vd_set, &mCtrl.vq_set, &mObs.theta, &mCtrl.va_set, &mCtrl.vb_set);
+  //   // calculate duties
+  //   svm(&mCtrl.va_set, &mCtrl.vb_set, &dutya, &dutyb, &dutyc);
+  //   // set output
+  //   TIMER_UPDATE_DUTY(dutya, dutyb, dutyc);
+  //   // delay
+  //   chThdSleepMicroseconds(FOC_THREAD_INTERVAL);
+
+
+
+  //   // svm debug
+  //   DBG3("%.3f %.3f ", mCtrl.va_set, mCtrl.vb_set);
+  //   DBG3("%d %d %d\r\n", dutya, dutyb, dutyc);
+  // }
 
   /**
    * @brief      SVM test
@@ -525,7 +535,7 @@ static THD_FUNCTION(mcfocMainThread, arg) {
    * @param[in]  <unnamed>  { parameter_description }
    */
   float t = 0;
-  float freq = 0.1;
+  float freq = 200.0;
   float alpha, beta, d, q, theta;
   uint16_t da, db, dc;
   d = 0;
@@ -545,14 +555,14 @@ static THD_FUNCTION(mcfocMainThread, arg) {
     svm(&alpha, &beta, &da, &db, &dc); // 4.3us
     TIMER_UPDATE_DUTY(da, db, dc);
     t += FOC_THREAD_INTERVAL;
-    freq += 0.002;
+    // freq += 0.002;
 
     // svm debug
     // DBG3("%.3f %.3f ", alpha, beta);
     // DBG3("%d %d %d\r\n", da, db, dc);
 
     // observer debug
-    DBG3("%.3f %.3f %.3f\r\n", 2*PI*freq, mObs.omega_e, mObs.theta);
+    // DBG3("%.3f %.3f %.3f\r\n", freq, mObs.omega_e, mObs.theta);
 
   palClearPad(GPIOE,14);
     chThdSleepMicroseconds(FOC_THREAD_INTERVAL);
@@ -584,9 +594,9 @@ static THD_FUNCTION(mcfocSecondaryThread, arg)
       curr_a = ADC_STORE_VOLT(i, ADC_CH_CURR_A);
       curr_b = ADC_STORE_VOLT(i, ADC_CH_CURR_B);
 
-      // DBG3("%d %.3f %.3f %.3f %.3f %.3f %.3f ",
-      //   i, ph_a, ph_b, ph_c, suppl, curr_a, curr_b);
-      // DBG3("\r\n");
+      DBG3("%d %.3f %.3f %.3f %.3f %.3f %.3f ",
+        i, ph_a, ph_b, ph_c, suppl, curr_a, curr_b);
+      DBG3("\r\n");
 
       chThdSleepMilliseconds(1);
     }  
@@ -680,6 +690,7 @@ static void analogCalibrate(void)
  * @brief      Calculates the duty cycles based on the input vectors in the
  * clark reference frame
  * @note       Magnitude must not be larger than sqrt(3)/2, or 0.866
+ * @note       Source: https://ez.analog.com/community/motor-control-hardware-platforms2/blog/2015/08/07/matlab-script-for-space-vector-modulation-functions
  *
  * @param      a     in: clark alpha component
  * @param      b     in: clark beta component
