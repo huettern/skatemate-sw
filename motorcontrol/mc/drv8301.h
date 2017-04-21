@@ -84,6 +84,11 @@
  */
 #define drvGateDisable()  palClearPad(DRV_EN_GATE_PORT, DRV_EN_GATE_PIN)
 
+/**
+ * @brief      Returns the driver fault status
+ */
+#define drvIsFault() (!palReadPad(DRV_NFAULT_PORT, DRV_NFAULT_PIN))
+
 /*===========================================================================*/
 /* Datatypes                                                                 */
 /*===========================================================================*/
@@ -94,8 +99,6 @@
 /*===========================================================================*/
 void drvInit(void);
 void drvDumpStatus(void);
-
-
 
 #endif
 /** @} */

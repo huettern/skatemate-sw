@@ -43,9 +43,9 @@
 /*===========================================================================*/
 /* DEBUG                                                                */
 /*===========================================================================*/
-// #define DEBUG_ADC
+#define DEBUG_ADC
 // #define DEBUG_SVM
-#define DEBUG_OBSERVER
+// #define DEBUG_OBSERVER
 
 /*===========================================================================*/
 /* settings                                                                */
@@ -130,7 +130,7 @@ static mcfObs_t mObs;
 static volatile uint16_t mADCValue[8]; // raw converted values
 
 static float mADCtoPinFactor, mADCtoVoltsFactor, mADCtoAmpsFactor;
-
+static uint16_t mDrvOffA, mDrvOffB; 
 
 
 /**
@@ -192,7 +192,10 @@ static volatile uint8_t mStoreObserver;
 /**
  * @brief      Returns the current in the shunt resister
  */
-#define ADC_AMP(ch) ( (float)(mADCValue[ch]-2047) * mADCtoAmpsFactor)
+#define ADC_CURR_A() ( ((float)mADCValue[ADC_CH_CURR_A]-mDrvOffA) * mADCtoAmpsFactor )
+#define ADC_CURR_B() ( ((float)mADCValue[ADC_CH_CURR_B]-mDrvOffB) * mADCtoAmpsFactor )
+#define ADC_STORE_CURR_A(i) ( ((float)mADCValueStore[i][ADC_CH_CURR_A]-mDrvOffA) * mADCtoAmpsFactor )
+#define ADC_STORE_CURR_B(i) ( ((float)mADCValueStore[i][ADC_CH_CURR_B]-mDrvOffB) * mADCtoAmpsFactor )
 /**
  * @brief      Returns the current temperature
  */
@@ -203,6 +206,7 @@ static volatile uint8_t mStoreObserver;
 /*===========================================================================*/
 static void dataInit(void);
 static void analogCalibrate(void);
+static void drvDCCal(void);
 
 static void svm (float* a, float* b, uint16_t* da, uint16_t* db, uint16_t* dc);
 
@@ -490,6 +494,7 @@ void mcfInit(void)
   TIM_SelectOutputTrigger(TIM1, TIM_TRGOSource_OC4Ref);
 
   analogCalibrate();
+  drvDCCal();
 
   /**
    * Create thread
@@ -525,7 +530,7 @@ void mcfDumpData(void)
   DBG2("pin    %7.3f |  %7.3f |  %7.3f |  %7.3f |  %7.3f |  %7.3f |  %7.3f |  %7.3f\r\n", ADC_PIN(0), ADC_PIN(1),
     ADC_PIN(2), ADC_PIN(3), ADC_PIN(4), ADC_PIN(5), ADC_PIN(6), ADC_PIN(7));
   DBG2("SI     %7.3f |  %7.3f |  %7.3f |  %7.3f |  %7.3f |  %7.3f |  %7.3f\r\n", ADC_VOLT(0), ADC_VOLT(1),
-    ADC_VOLT(2), ADC_VOLT(3), ADC_AMP(4), ADC_AMP(5), ADC_TEMP(6));
+    ADC_VOLT(2), ADC_VOLT(3), ADC_CURR_A(), ADC_CURR_B(), ADC_TEMP(6));
 
   // ADC_StartConversion(ADC1);
   // ADC_StartConversion(ADC3);
@@ -571,16 +576,16 @@ static THD_FUNCTION(mcfocMainThread, arg) {
   uint16_t da, db, dc;
   mCtrl.vd_set = 0;
   mCtrl.vq_set = 0.5;
-  TIMER_UPDATE_DUTY(1500, 1000, 1500);
+  TIMER_UPDATE_DUTY(1500, 0, 0);
   while (true) {
 
 
-    theta = 2*PI*freq*(t/1000000); //800ns
-    invpark(&mCtrl.vd_set, &mCtrl.vq_set, &theta, &mCtrl.va_set, &mCtrl.vb_set); // 5.5us
-    utils_saturate_vector_2d(&mCtrl.va_set, &mCtrl.vb_set, SQRT_3_BY_2);
-    svm(&mCtrl.va_set, &mCtrl.vb_set, &da, &db, &dc); // 4.3us
-    TIMER_UPDATE_DUTY(dc, db, da);
-    t += FOC_THREAD_INTERVAL;
+    // theta = 2*PI*freq*(t/1000000); //800ns
+    // invpark(&mCtrl.vd_set, &mCtrl.vq_set, &theta, &mCtrl.va_set, &mCtrl.vb_set); // 5.5us
+    // utils_saturate_vector_2d(&mCtrl.va_set, &mCtrl.vb_set, SQRT_3_BY_2);
+    // svm(&mCtrl.va_set, &mCtrl.vb_set, &da, &db, &dc); // 4.3us
+    // TIMER_UPDATE_DUTY(dc, db, da);
+    // t += FOC_THREAD_INTERVAL;
     // freq += 0.005;
 
     chThdSleepMicroseconds(FOC_THREAD_INTERVAL);
@@ -608,14 +613,12 @@ static THD_FUNCTION(mcfocSecondaryThread, arg)
         ph_b = ADC_STORE_VOLT(i, ADC_CH_PH_B);
         ph_c = ADC_STORE_VOLT(i, ADC_CH_PH_C);
         suppl = ADC_STORE_VOLT(i, ADC_CH_SUPPL);
-        curr_a = ADC_STORE_VOLT(i, ADC_CH_CURR_A);
-        curr_b = ADC_STORE_VOLT(i, ADC_CH_CURR_B);
+        curr_a = ADC_STORE_CURR_A(i);
+        curr_b = ADC_STORE_CURR_B(i);
 
-        DBG3("%d %.3f %.3f %.3f %.3f %.3f %.3f ",
-          i, ph_a, ph_b, ph_c, suppl, curr_a, curr_b);
+        DBG3("%.3f %.3f %.3f %.3f %.3f %.3f ",
+          ph_a, ph_b, ph_c, suppl, curr_a, curr_b);
         DBG3("\r\n");
-
-        chThdSleepMilliseconds(1);
       }  
     #endif
     #ifdef DEBUG_SVM
@@ -722,6 +725,28 @@ static void analogCalibrate(void)
   DBG2("mADCtoPinFactor=%f\r\n", mADCtoPinFactor);
   DBG2("mADCtoVoltsFactor=%f\r\n", mADCtoVoltsFactor);
   DBG2("mADCtoAmpsFactor=%f\r\n", mADCtoAmpsFactor);
+}
+/**
+ * @brief      Performs the Current offset clibration of the drv8301
+ */
+static void drvDCCal(void)
+{
+  uint16_t ctr;
+  uint32_t sum1, sum2;
+  drvDCCalEnable();
+  sum1 = 0; sum2 = 0;
+  chThdSleepMilliseconds(10);
+  while(drvIsFault()) chThdSleepMilliseconds(1);
+  for(ctr = 0; ctr < 2000; ctr++)
+  {
+    sum1 += mADCValue[ADC_CH_CURR_A];
+    sum2 += mADCValue[ADC_CH_CURR_B];
+    chThdSleepMicroseconds(100);
+  }
+  mDrvOffA = sum1 / 2000;
+  mDrvOffB = sum2 / 2000;
+  drvDCCalDisable();
+  DBG2("Current offset A/B: %04d / %04d\r\n", mDrvOffA, mDrvOffB);
 }
 /**
  * @brief      Calculates the duty cycles based on the input vectors in the
@@ -1016,8 +1041,8 @@ palSetPad(GPIOE,14);
   chSysLockFromISR();
   dt = 1.0/((float)FOC_F_SW);
 
-  mCtrl.ipa_is = ADC_AMP(ADC_CH_CURR_A);
-  mCtrl.ipb_is = ADC_AMP(ADC_CH_CURR_B);
+  mCtrl.ipa_is = ADC_CURR_A();
+  mCtrl.ipb_is = ADC_CURR_B();
   mCtrl.ipc_is = -mCtrl.ipa_is -mCtrl.ipb_is;
   clark(&mCtrl.ipa_is, &mCtrl.ipb_is, &mCtrl.ipc_is, &mCtrl.ia_is, &mCtrl.ib_is);
   runPositionObserver(&dt);

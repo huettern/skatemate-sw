@@ -109,8 +109,6 @@ int main(void)
   palSetPadMode(GPIOB, 10, PAL_MODE_ALTERNATE(7)); // used function : USART3_TX
   palSetPadMode(GPIOB, 11, PAL_MODE_ALTERNATE(7)); // used function : USART3_RX
   sdStart(&SD3, NULL);
-  char data[] = "Hello World ! \n \r";
-  sdWrite(&SD3, (uint8_t *) data, strlen(data));
   // utlmEnable(true);
   while (true) 
   {
