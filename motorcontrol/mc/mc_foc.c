@@ -128,10 +128,29 @@ static mcfController_t mCtrl;
 static mcfObs_t mObs;
 
 static volatile uint16_t mADCValue[8]; // raw converted values
-#define ADC_STORE_DEPTH 500
+
+static float mADCtoPinFactor, mADCtoVoltsFactor, mADCtoAmpsFactor;
+
+
+
+/**
+ * Debug data
+ */
+#ifdef DEBUG_ADC
+  #define ADC_STORE_DEPTH 500
+#else
+  #define ADC_STORE_DEPTH 1
+#endif
 static volatile uint16_t mADCValueStore[ADC_STORE_DEPTH][8]; // raw converted values
 static volatile uint8_t mStoreADC1, mStoreADC3;
-static float mADCtoPinFactor, mADCtoVoltsFactor, mADCtoAmpsFactor;
+#ifdef DEBUG_OBSERVER
+  #define OBS_STORE_DEPTH 500
+#else
+  #define OBS_STORE_DEPTH 1
+#endif
+static volatile float mOBSValueStore[OBS_STORE_DEPTH][5];
+static volatile uint8_t mStoreObserver;
+
 
 /*===========================================================================*/
 /* macros                                                                    */
@@ -547,7 +566,7 @@ static THD_FUNCTION(mcfocMainThread, arg) {
    * @param[in]  <unnamed>  { parameter_description }
    */
   float t = 0;
-  float freq = 10.0;
+  float freq = 200.0;
   float theta;
   uint16_t da, db, dc;
   mCtrl.vd_set = 0;
@@ -562,7 +581,7 @@ static THD_FUNCTION(mcfocMainThread, arg) {
     svm(&mCtrl.va_set, &mCtrl.vb_set, &da, &db, &dc); // 4.3us
     TIMER_UPDATE_DUTY(dc, db, da);
     t += FOC_THREAD_INTERVAL;
-    freq += 0.005;
+    // freq += 0.005;
 
     chThdSleepMicroseconds(FOC_THREAD_INTERVAL);
   }
@@ -601,11 +620,21 @@ static THD_FUNCTION(mcfocSecondaryThread, arg)
     #endif
     #ifdef DEBUG_SVM
       // svm debug
-      DBG3("%.3f %.3f %d %d %d\r\n", alpha, beta, da, db, dc);
+      DBG3("%.3f %.3f %d %d %d\r\n", mCtrl.va_set, mCtrl.vb_set, 
+        TIM1->CCR2, TIM1->CCR2, TIM1->CCR1);
     #endif
     #ifdef DEBUG_OBSERVER
+      chThdSleepMilliseconds(5000);
+      mStoreObserver = 1;
+      chThdSleepMilliseconds(1);
+      while(mStoreObserver) chThdSleepMilliseconds(1);
+      for(i = 0; i < OBS_STORE_DEPTH; i++)
+      {
+        DBG3("%.3f %.3f %.3f %.3f %.3f\r\n", mOBSValueStore[i][0], mOBSValueStore[i][1], 
+          mOBSValueStore[i][2], mOBSValueStore[i][3], mOBSValueStore[i][4]);
+      } 
     // observer debug
-      DBG3("%.3f %.3f %.3f %.3f\r\n", mObs.omega_e, mObs.theta, mCtrl.va_set, mCtrl.vb_set);
+      // DBG3("%.3f %.3f %.3f %.3f\r\n", mObs.omega_e, mObs.theta, mCtrl.va_set, mCtrl.vb_set);
     #endif
     chThdSleepMilliseconds(1);
   }
@@ -864,6 +893,7 @@ static void runPositionObserver(float *dt)
 {
   static float pos_error;
   static float xp[2];
+  static uint16_t ctr;
 
   mObs.eta[0] = mObs.x[0] - mMotParms.Ls*(mCtrl.ia_is);
   mObs.eta[1] = mObs.x[1] - mMotParms.Ls*(mCtrl.ib_is);
@@ -882,6 +912,20 @@ static void runPositionObserver(float *dt)
 
   mObs.theta = utilFastAtan2((mObs.x[1] - mMotParms.Ls*(mCtrl.ib_is)), 
     (mObs.x[0] - mMotParms.Ls*(mCtrl.ia_is) ));
+
+#ifdef DEBUG_OBSERVER
+  if(mStoreObserver)
+  {
+    // copy to store reg
+    ctr %= OBS_STORE_DEPTH;
+    mOBSValueStore[ctr][0] = mCtrl.ia_is;
+    mOBSValueStore[ctr][1] = mCtrl.ib_is;
+    mOBSValueStore[ctr][2] = mCtrl.va_set;
+    mOBSValueStore[ctr][3] = mCtrl.vb_set;
+    mOBSValueStore[ctr++][4] = mObs.theta;
+    if(ctr >= OBS_STORE_DEPTH) mStoreObserver = 0;
+  }
+#endif
 }
 /**
  * @brief      Estimates the rotor speed using a PLL
@@ -969,6 +1013,7 @@ CH_IRQ_HANDLER(VectorFC) {
 //palTogglePad(GPIOE,14);
 
 palSetPad(GPIOE,14);
+  chSysLockFromISR();
   dt = 1.0/((float)FOC_F_SW);
 
   mCtrl.ipa_is = ADC_AMP(ADC_CH_CURR_A);
@@ -977,7 +1022,9 @@ palSetPad(GPIOE,14);
   clark(&mCtrl.ipa_is, &mCtrl.ipb_is, &mCtrl.ipc_is, &mCtrl.ia_is, &mCtrl.ib_is);
   runPositionObserver(&dt);
   runSpeedObserver(&dt);
+  chSysUnlockFromISR();
 
+#ifdef DEBUG_ADC
   if(mStoreADC3)
   {
     // copy to store reg
@@ -989,6 +1036,7 @@ palSetPad(GPIOE,14);
     if(ctr >= ADC_STORE_DEPTH) mStoreADC3 = 0;
     ctr %= ADC_STORE_DEPTH;
   }
+#endif
 palClearPad(GPIOE,14);
 
   // mc_interface_adc_inj_int_handler();
