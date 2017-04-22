@@ -191,11 +191,12 @@ static volatile uint8_t mStoreObserver;
 #define ADC_STORE_VOLT(i, ch) ( (float)mADCValueStore[i][ch] * mADCtoVoltsFactor)
 /**
  * @brief      Returns the current in the shunt resister
+ * @note       TODO: Remove minus for new revision!!!
  */
-#define ADC_CURR_A() ( ((float)mADCValue[ADC_CH_CURR_A]-mDrvOffA) * mADCtoAmpsFactor )
-#define ADC_CURR_B() ( ((float)mADCValue[ADC_CH_CURR_B]-mDrvOffB) * mADCtoAmpsFactor )
-#define ADC_STORE_CURR_A(i) ( ((float)mADCValueStore[i][ADC_CH_CURR_A]-mDrvOffA) * mADCtoAmpsFactor )
-#define ADC_STORE_CURR_B(i) ( ((float)mADCValueStore[i][ADC_CH_CURR_B]-mDrvOffB) * mADCtoAmpsFactor )
+#define ADC_CURR_A() ( ((float)mADCValue[ADC_CH_CURR_A]-mDrvOffA) * -mADCtoAmpsFactor )
+#define ADC_CURR_B() ( ((float)mADCValue[ADC_CH_CURR_B]-mDrvOffB) * -mADCtoAmpsFactor )
+#define ADC_STORE_CURR_A(i) ( ((float)mADCValueStore[i][ADC_CH_CURR_A]-mDrvOffA) * -mADCtoAmpsFactor )
+#define ADC_STORE_CURR_B(i) ( ((float)mADCValueStore[i][ADC_CH_CURR_B]-mDrvOffB) * -mADCtoAmpsFactor )
 /**
  * @brief      Returns the current temperature
  */
