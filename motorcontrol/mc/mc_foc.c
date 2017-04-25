@@ -243,6 +243,7 @@ void mcfInit(void)
   /**
    * TIM1 Timebase init
    * 
+   * Clock source is PCLK2 = APB2_CLOCK
    * Prescaler: Clock prescaler. Set to 0 for maximum input clock
    * Counter Mode: Center aligned 2, counter counts up to TIM_Period-1 and down
    *  to zero. The Output compare interrupt flag of channels configured in output 

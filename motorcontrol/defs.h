@@ -32,6 +32,9 @@
 #define DEFS_THD_MCFOC_SECOND_NAME		"mcfoc_sec"
 
 #define SYSTEM_CORE_CLOCK	72000000 //Hz
+#define APB1_CLOCK	36000000 //Hz
+#define APB2_CLOCK	72000000 //Hz
+#define AHB_CLOCK	72000000 //Hz
 #define PLL_CLOCK	72000000 //Hz
 
 // DBG for usb debugging messages
