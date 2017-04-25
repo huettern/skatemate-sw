@@ -367,12 +367,11 @@ void mcfInit(void)
 
   /******* ADC *******/  
   // Clock
-  RCC_AHBPeriphClockCmd(RCC_AHBPeriph_DMA2, ENABLE);
   RCC_AHBPeriphClockCmd(RCC_AHBPeriph_ADC12, ENABLE);
   RCC_AHBPeriphClockCmd(RCC_AHBPeriph_ADC34, ENABLE); 
-
-  RCC_ADCCLKConfig(RCC_ADC12PLLCLK_Div10); 
-  RCC_ADCCLKConfig(RCC_ADC34PLLCLK_Div10); 
+  // ADC clock source is directly from the PLL output
+  RCC_ADCCLKConfig(RCC_ADC12PLLCLK_Div1); 
+  RCC_ADCCLKConfig(RCC_ADC34PLLCLK_Div1); 
 
   // GPIOs (SOx pins are done in the drv8301 module)
   palSetPadMode(GPIOA, 0, PAL_MODE_INPUT_ANALOG);
@@ -382,13 +381,13 @@ void mcfInit(void)
 
   /**
    * ADC_Mode: ADCs 1/2 and 3/4 are working independant
-   * ADC_Clock: Synchronous clock mode divided by 2 HCLK/2
+   * ADC_Clock: Clock source is PLL output
    * ADC_DMAAccessMode: MDMA mode enabled for 12 and 10-bit resolution
    * ADC_DMAMode: DMA circular event generation for continuous data streams
    * ADC_TwoSamplingDelay: Not used in independant mode
    */
   adc_cis.ADC_Mode = ADC_Mode_Independent;
-  adc_cis.ADC_Clock = ADC_Clock_SynClkModeDiv2;
+  adc_cis.ADC_Clock = ADC_Clock_AsynClkMode;
   adc_cis.ADC_DMAAccessMode = ADC_DMAAccessMode_1;
   adc_cis.ADC_DMAMode = ADC_DMAMode_Circular;
   adc_cis.ADC_TwoSamplingDelay = 0x00;

@@ -32,6 +32,7 @@
 #define DEFS_THD_MCFOC_SECOND_NAME		"mcfoc_sec"
 
 #define SYSTEM_CORE_CLOCK	72000000 //Hz
+#define PLL_CLOCK	72000000 //Hz
 
 // DBG for usb debugging messages
 #define DBG(X, ...) chprintf(bssusb, X, ##__VA_ARGS__ )
