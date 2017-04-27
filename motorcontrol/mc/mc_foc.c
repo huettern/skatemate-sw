@@ -75,6 +75,12 @@
  * How much slower the current control loop should run
  */
 #define FOC_CURRENT_CONTROLLER_SLOWDOWN 10
+/**
+ * Forced commutation settings
+ */
+#define FOC_FORCED_COMM_FREQ 70.0
+#define FOC_FORCED_COMM_VD 0.0
+#define FOC_FORCED_COMM_VQ 0.07
 
 /**
  * Motor default parameters
@@ -237,6 +243,7 @@ static void runSpeedController (void);
 static void runCurrentController (void);
 static void runOutputs(void);
 static void runOutputsWithoutObserver(float theta);
+static void forcedCommutation (void);
 
 /*===========================================================================*/
 /* Module public functions.                                                  */
@@ -1101,6 +1108,21 @@ static void runOutputsWithoutObserver(float theta)
   // set output
   TIMER_UPDATE_DUTY(dutyc, dutyb, dutya); // 0.993us
 }
+/**
+ * @brief      Runs output in forced commutation mode
+ */
+static void forcedCommutation (void)
+{
+  static float t = 0.0;
+  static const float freq = FOC_FORCED_COMM_FREQ;
+  static float theta;
+
+  theta = 2*PI*freq*(t); //800ns
+  mCtrl.vd_set = FOC_FORCED_COMM_VD;
+  mCtrl.vq_set = FOC_FORCED_COMM_VQ;
+  t += ((float)FOC_CURRENT_CONTROLLER_SLOWDOWN / FOC_F_SW);
+  runOutputsWithoutObserver(theta);
+}
 
 /*===========================================================================*/
 /* Interrupt handlers                                                        */
@@ -1137,9 +1159,6 @@ CH_IRQ_HANDLER(VectorFC) {
   static uint16_t istCtr = 0;
   static float dt = 0;
 
-  static float t = 0.0;
-  static const float freq = 70.0;
-  static float theta;
 
   CH_IRQ_PROLOGUE();
   palSetPad(GPIOE,14);
@@ -1166,11 +1185,15 @@ CH_IRQ_HANDLER(VectorFC) {
     chBSemSignalI(&mIstSem);
     chSysUnlockFromISR(); 
 
-    theta = 2*PI*freq*(t); //800ns
-    mCtrl.vd_set = 0;
-    mCtrl.vq_set = 0.07;
-    t += ((float)FOC_CURRENT_CONTROLLER_SLOWDOWN / FOC_F_SW);
-    runOutputsWithoutObserver(theta);
+    // park(&mCtrl.ia_is, &mCtrl.ib_is, &mObs.theta, &mCtrl.id_is, &mCtrl.iq_is);
+    // // run speed controller
+    // runSpeedController();
+    // mCtrl.id_set = 0.0; // override
+    // mCtrl.iq_set = 0.01;
+    // // run current controller
+    // runCurrentController();
+    // runOutputs();
+    forcedCommutation();
   }
 
 #ifdef DEBUG_ADC
