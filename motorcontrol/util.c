@@ -159,7 +159,8 @@ float utilFastAtan2(float y, float x) {
 }
 
 /**
- * Truncate the magnitude of a vector.
+ * @brief      Truncate the magnitude of a vector.
+ * @note       Duration 7.325us
  *
  * @param x   The first component.
  * @param y   The second component.
