@@ -1,4 +1,4 @@
-/**
+/*
  * @file       mc_foc.c
  * @brief      FOC implementation
  * @details    
@@ -30,6 +30,8 @@
 
 #include "ch.h"
 #include "hal.h"
+#include "chbsem.h"
+
 #include "defs.h"
 #include "util.h"
 
@@ -41,14 +43,20 @@
 #include "drv8301.h"
 
 /*===========================================================================*/
-/* DEBUG                                                                */
+/* DEBUG                                                                     */
 /*===========================================================================*/
-#define DEBUG_ADC
+// #define DEBUG_ADC
 // #define DEBUG_SVM
 // #define DEBUG_OBSERVER
 
 /*===========================================================================*/
-/* settings                                                                */
+/* IMPLEMENTATION SETTINGS                                                   */
+/*===========================================================================*/
+// If defined, use the CMSIS implementation of the clark and park transform
+// #define USE_CMSIS_CLARK_PARK
+
+/*===========================================================================*/
+/* settings                                                                  */
 /*===========================================================================*/
 /**
  * PWM switching frequency
@@ -62,7 +70,17 @@
 /**
  * How fast the control thread should run
  */
-#define FOC_THREAD_INTERVAL 1000 // us
+#define FOC_THREAD_INTERVAL 100 // us
+/**
+ * How much slower the current control loop should run
+ */
+#define FOC_CURRENT_CONTROLLER_SLOWDOWN 10
+/**
+ * Forced commutation settings
+ */
+#define FOC_FORCED_COMM_FREQ 70.0
+#define FOC_FORCED_COMM_VD 0.0
+#define FOC_FORCED_COMM_VQ 0.07
 
 /**
  * Motor default parameters
@@ -92,7 +110,8 @@
 /**
  * @brief      Resistor divider for voltage measurements
  */
-#define BOARD_ADC_PIN_TO_VOLT (float)((2.2f + 39.0f)/2.2f)
+// #define BOARD_ADC_PIN_TO_VOLT (float)((2.2f + 39.0f)/2.2f) // using resistor values
+#define BOARD_ADC_PIN_TO_VOLT (17.1183) // using measured ratio
 /**
  * @brief      Shunt resistor for current measurement
  */
@@ -132,6 +151,7 @@ static volatile uint16_t mADCValue[8]; // raw converted values
 static float mADCtoPinFactor, mADCtoVoltsFactor, mADCtoAmpsFactor;
 static uint16_t mDrvOffA, mDrvOffB; 
 
+static BSEMAPHORE_DECL(mIstSem, TRUE);
 
 /**
  * Debug data
@@ -194,7 +214,8 @@ static volatile uint8_t mStoreObserver;
  * @note       TODO: Remove minus for new revision!!!
  */
 #define ADC_CURR_A() ( ((float)mADCValue[ADC_CH_CURR_A]-mDrvOffA) * -mADCtoAmpsFactor )
-#define ADC_CURR_B() ( ((float)mADCValue[ADC_CH_CURR_B]-mDrvOffB) * -mADCtoAmpsFactor )
+// TODO: This 2.2 is a measured difference between the 2 currnet sense outputs from the drv
+#define ADC_CURR_B() ( ((float)mADCValue[ADC_CH_CURR_B]-mDrvOffB) * -mADCtoAmpsFactor / 2.2) 
 #define ADC_STORE_CURR_A(i) ( ((float)mADCValueStore[i][ADC_CH_CURR_A]-mDrvOffA) * -mADCtoAmpsFactor )
 #define ADC_STORE_CURR_B(i) ( ((float)mADCValueStore[i][ADC_CH_CURR_B]-mDrvOffB) * -mADCtoAmpsFactor )
 /**
@@ -220,6 +241,9 @@ static void runPositionObserver(float *dt);
 static void runSpeedObserver (float *dt);
 static void runSpeedController (void);
 static void runCurrentController (void);
+static void runOutputs(void);
+static void runOutputsWithoutObserver(float theta);
+static void forcedCommutation (void);
 
 /*===========================================================================*/
 /* Module public functions.                                                  */
@@ -243,6 +267,7 @@ void mcfInit(void)
   /**
    * TIM1 Timebase init
    * 
+   * Clock source is PCLK2 = APB2_CLOCK
    * Prescaler: Clock prescaler. Set to 0 for maximum input clock
    * Counter Mode: Center aligned 2, counter counts up to TIM_Period-1 and down
    *  to zero. The Output compare interrupt flag of channels configured in output 
@@ -366,13 +391,12 @@ void mcfInit(void)
   DMA_Cmd(DMA2_Channel5, ENABLE);
 
   /******* ADC *******/  
+  // ADC clock source is directly from the PLL output
+  RCC_ADCCLKConfig(RCC_ADC12PLLCLK_Div1); 
+  RCC_ADCCLKConfig(RCC_ADC34PLLCLK_Div1); 
   // Clock
-  RCC_AHBPeriphClockCmd(RCC_AHBPeriph_DMA2, ENABLE);
   RCC_AHBPeriphClockCmd(RCC_AHBPeriph_ADC12, ENABLE);
   RCC_AHBPeriphClockCmd(RCC_AHBPeriph_ADC34, ENABLE); 
-
-  RCC_ADCCLKConfig(RCC_ADC12PLLCLK_Div10); 
-  RCC_ADCCLKConfig(RCC_ADC34PLLCLK_Div10); 
 
   // GPIOs (SOx pins are done in the drv8301 module)
   palSetPadMode(GPIOA, 0, PAL_MODE_INPUT_ANALOG);
@@ -382,13 +406,13 @@ void mcfInit(void)
 
   /**
    * ADC_Mode: ADCs 1/2 and 3/4 are working independant
-   * ADC_Clock: Synchronous clock mode divided by 2 HCLK/2
+   * ADC_Clock: Clock source is PLL output
    * ADC_DMAAccessMode: MDMA mode enabled for 12 and 10-bit resolution
    * ADC_DMAMode: DMA circular event generation for continuous data streams
    * ADC_TwoSamplingDelay: Not used in independant mode
    */
   adc_cis.ADC_Mode = ADC_Mode_Independent;
-  adc_cis.ADC_Clock = ADC_Clock_SynClkModeDiv2;
+  adc_cis.ADC_Clock = ADC_Clock_AsynClkMode;
   adc_cis.ADC_DMAAccessMode = ADC_DMAAccessMode_1;
   adc_cis.ADC_DMAMode = ADC_DMAMode_Circular;
   adc_cis.ADC_TwoSamplingDelay = 0x00;
@@ -418,6 +442,8 @@ void mcfInit(void)
   adc_is.ADC_NbrOfRegChannel = 4;
   ADC_Init(ADC1, &adc_is);
   ADC_Init(ADC3, &adc_is);
+  ADC_Cmd(ADC1, ENABLE);
+  ADC_Cmd(ADC3, ENABLE);
 
   // Enable voltage regulator
   ADC_VoltageRegulatorCmd(ADC1, ENABLE);
@@ -429,13 +455,6 @@ void mcfInit(void)
   ADC_VrefintCmd(ADC1, ENABLE);
   ADC_VrefintCmd(ADC3, ENABLE);
 
-  //calibrate
-  ADC_SelectCalibrationMode(ADC1, ADC_CalibrationMode_Single);
-  ADC_StartCalibration(ADC1);
-  ADC_SelectCalibrationMode(ADC3, ADC_CalibrationMode_Single);
-  ADC_StartCalibration(ADC3);
-  while(ADC_GetCalibrationStatus(ADC1) == SET);
-  while(ADC_GetCalibrationStatus(ADC3) == SET);
 
   /**
    * Configure the regular channels
@@ -446,10 +465,10 @@ void mcfInit(void)
    * - 3: IN3 Phase A
    * - 4: IN9 Supply
    */
-  ADC_RegularChannelConfig(ADC1, ADC_Channel_1, 1, ADC_SampleTime_1Cycles5);
-  ADC_RegularChannelConfig(ADC1, ADC_Channel_2, 2, ADC_SampleTime_1Cycles5);
-  ADC_RegularChannelConfig(ADC1, ADC_Channel_3, 3, ADC_SampleTime_1Cycles5);
-  ADC_RegularChannelConfig(ADC1, ADC_Channel_9, 4, ADC_SampleTime_1Cycles5);
+  ADC_RegularChannelConfig(ADC1, ADC_Channel_1, 1, ADC_SampleTime_61Cycles5);
+  ADC_RegularChannelConfig(ADC1, ADC_Channel_2, 2, ADC_SampleTime_61Cycles5);
+  ADC_RegularChannelConfig(ADC1, ADC_Channel_3, 3, ADC_SampleTime_61Cycles5);
+  ADC_RegularChannelConfig(ADC1, ADC_Channel_9, 4, ADC_SampleTime_61Cycles5);
   ADC_RegularChannelSequencerLengthConfig(ADC1, 4);
   /** 
    * ADC3:
@@ -458,24 +477,31 @@ void mcfInit(void)
    * - 3: Temperatur
    * - 4: VrefInt
    */
-  ADC_RegularChannelConfig(ADC3, ADC_Channel_12, 1, ADC_SampleTime_1Cycles5);
-  ADC_RegularChannelConfig(ADC3, ADC_Channel_1, 2, ADC_SampleTime_1Cycles5);
-  ADC_RegularChannelConfig(ADC3, ADC_Channel_TempSensor, 3, ADC_SampleTime_1Cycles5);
-  ADC_RegularChannelConfig(ADC3, ADC_Channel_Vrefint, 4, ADC_SampleTime_1Cycles5);
+  ADC_RegularChannelConfig(ADC3, ADC_Channel_12, 1, ADC_SampleTime_61Cycles5);
+  ADC_RegularChannelConfig(ADC3, ADC_Channel_1, 2, ADC_SampleTime_61Cycles5);
+  ADC_RegularChannelConfig(ADC3, ADC_Channel_TempSensor, 3, ADC_SampleTime_61Cycles5);
+  ADC_RegularChannelConfig(ADC3, ADC_Channel_Vrefint, 4, ADC_SampleTime_61Cycles5);
   ADC_RegularChannelSequencerLengthConfig(ADC3, 4);
 
+  //calibrate
+  // ADC_SelectCalibrationMode(ADC1, ADC_CalibrationMode_Single);
+  // ADC_StartCalibration(ADC1);
+  // while(ADC_GetCalibrationStatus(ADC1) == SET);
+  // ADC_SelectCalibrationMode(ADC3, ADC_CalibrationMode_Single);
+  // ADC_StartCalibration(ADC3);
+  // while(ADC_GetCalibrationStatus(ADC3) == SET);
+  
   /**
    * Enable ADC
    */
   ADC_ITConfig(ADC1, ADC_IT_EOS, ENABLE);
   ADC_ITConfig(ADC3, ADC_IT_EOS, ENABLE);
-  nvicEnableVector(ADC1_2_IRQn, 8);
+  // nvicEnableVector(ADC1_2_IRQn, 8);
   nvicEnableVector(ADC3_IRQn, 2); // Higher prio to current sampling
 
   // ADC_ExternalTriggerConfig(ADC1, ADC_ExternalTrigConvEvent_9, ADC_ExternalTrigEventEdge_FallingEdge);
   // ADC_ExternalTriggerConfig(ADC3, ADC_ExternalTrigConvEvent_9, ADC_ExternalTrigEventEdge_FallingEdge);
-  ADC_Cmd(ADC1, ENABLE);
-  ADC_Cmd(ADC3, ENABLE);
+  //start
   ADC_DMACmd(ADC1, ENABLE);
   ADC_DMACmd(ADC3, ENABLE);
   ADC_StartConversion(ADC1);
@@ -543,7 +569,7 @@ void mcfDumpData(void)
 static THD_FUNCTION(mcfocMainThread, arg) {
   (void)arg;
   chRegSetThreadName(DEFS_THD_MCFOC_MAIN_NAME);
-  uint16_t dutya, dutyb, dutyc;
+  // uint16_t dutya, dutyb, dutyc;
 
   // while(true)
   // {
@@ -571,32 +597,40 @@ static THD_FUNCTION(mcfocMainThread, arg) {
    *
    * @param[in]  <unnamed>  { parameter_description }
    */
-  float t = 0;
-  float freq = 200.0;
-  float theta;
-  uint16_t da, db, dc;
+  static float t = 0;
+  static float freq = 70.0;
+  static float theta;
+  static uint16_t da, db, dc;
   mCtrl.vd_set = 0;
-  mCtrl.vq_set = 0.5;
-  TIMER_UPDATE_DUTY(1500, 0, 0);
+  mCtrl.vq_set = 0.05;
+  // TIMER_UPDATE_DUTY(1500, 0, 0);
   while (true) {
-
+    // override values
+// palSetPad(GPIOE,14);
+    chBSemWait(&mIstSem);
+// palSetPad(GPIOE,14);
+//     theta = 2*PI*freq*(t); //800ns
+//     mCtrl.vd_set = 0;
+//     mCtrl.vq_set = 0.07;
+//     t += ((float)FOC_CURRENT_CONTROLLER_SLOWDOWN / FOC_F_SW);
+//     runOutputsWithoutObserver(theta);
+// palClearPad(GPIOE,14);
+    // chThdSleepMicroseconds(FOC_THREAD_INTERVAL);
 
     // theta = 2*PI*freq*(t/1000000); //800ns
     // invpark(&mCtrl.vd_set, &mCtrl.vq_set, &theta, &mCtrl.va_set, &mCtrl.vb_set); // 5.5us
     // utils_saturate_vector_2d(&mCtrl.va_set, &mCtrl.vb_set, SQRT_3_BY_2);
     // svm(&mCtrl.va_set, &mCtrl.vb_set, &da, &db, &dc); // 4.3us
     // TIMER_UPDATE_DUTY(dc, db, da);
-    // t += FOC_THREAD_INTERVAL;
     // freq += 0.005;
 
-    chThdSleepMicroseconds(FOC_THREAD_INTERVAL);
   }
 }
 static THD_FUNCTION(mcfocSecondaryThread, arg)
 {
   (void)arg;
   chRegSetThreadName(DEFS_THD_MCFOC_SECOND_NAME);
-  static float ph_a, ph_b, ph_c, suppl, curr_a, curr_b;
+  static float ph_a, ph_b, ph_c, suppl, curr_a, curr_b, ref;
   uint16_t i;
   // utlmEnable(true);
   
@@ -616,10 +650,11 @@ static THD_FUNCTION(mcfocSecondaryThread, arg)
         suppl = ADC_STORE_VOLT(i, ADC_CH_SUPPL);
         curr_a = ADC_STORE_CURR_A(i);
         curr_b = ADC_STORE_CURR_B(i);
+        ref = ADC_STORE_VOLT(i, ADC_CH_REF);
 
-        DBG3("%.3f %.3f %.3f %.3f %.3f %.3f ",
-          ph_a, ph_b, ph_c, suppl, curr_a, curr_b);
-        DBG3("\r\n");
+        DBG3("%.3f %.3f %.3f %.3f %.3f %.3f %.3f\r\n", ph_a, ph_b, ph_c, suppl, curr_a, curr_b, ref);
+        // DBG3("%d %d %d %d %d %d %d\r\n", mADCValueStore[i][ADC_CH_PH_A], mADCValueStore[i][ADC_CH_PH_B], mADCValueStore[i][ADC_CH_PH_C], 
+        //   mADCValueStore[i][ADC_CH_SUPPL], mADCValueStore[i][ADC_CH_CURR_A], mADCValueStore[i][ADC_CH_CURR_B], mADCValueStore[i][ADC_CH_REF]);
       }  
     #endif
     #ifdef DEBUG_SVM
@@ -709,16 +744,25 @@ static void dataInit(void)
  */
 static void analogCalibrate(void)
 {
+  uint16_t ctr = 0;
+  float buf;
   const uint8_t* vrefint_cal_lsb = (uint8_t*)0x1FFFF7BA;
   const uint8_t* vrefint_cal_msb = (uint8_t*)0x1FFFF7BB;
   const uint16_t vrefint_cal = ((*vrefint_cal_msb)<<8) | (*vrefint_cal_lsb);
 
   // wait for data in vref input
   while(mADCValue[7] == 0);
+  buf = 0;
+  for(ctr = 0; ctr < 256; ctr++)
+  {
+    buf += (float)mADCValue[ADC_CH_REF];
+    chThdSleepMicroseconds(100);
+  }
+  buf /= 256;
 
   // reference man, page 375
-  // mADCtoPinFactor = 3.3f * (float)vrefint_cal / ((float)mADCValue[7]*4095.0f);
-  mADCtoPinFactor = 3.3f / 4095.0f;
+  mADCtoPinFactor = 3.3f * (float)vrefint_cal / (buf*4095.0f);
+  // mADCtoPinFactor = 3.3f / 4095.0f;
   mADCtoVoltsFactor = mADCtoPinFactor * BOARD_ADC_PIN_TO_VOLT;
   mADCtoAmpsFactor =  mADCtoPinFactor * BOARD_ADC_PIN_TO_AMP;
 
@@ -754,6 +798,7 @@ static void drvDCCal(void)
  * clark reference frame
  * @note       Magnitude must not be larger than sqrt(3)/2, or 0.866
  * @note       Source: https://ez.analog.com/community/motor-control-hardware-platforms2/blog/2015/08/07/matlab-script-for-space-vector-modulation-functions
+ * @note       Duration: 3.738us
  *
  * @param      a     in: clark alpha component
  * @param      b     in: clark beta component
@@ -844,6 +889,7 @@ static void svm (float* a, float* b, uint16_t* da, uint16_t* db, uint16_t* dc)
 
 /**
  * @brief      Forward clark transformation
+ * @note       Duration: 1.729us, with USE_CMSIS_CLARK_PARK 1.326us
  *
  * @param      va    in: a component
  * @param      vb    in: b component
@@ -853,11 +899,16 @@ static void svm (float* a, float* b, uint16_t* da, uint16_t* db, uint16_t* dc)
  */
 static void clark (float* va, float* vb, float* vc, float* a, float* b)
 {
-  *a = 2.0f / 3.0f * (*va - 0.5f*(*vb) - 0.5f*(*vc));
-  *b = 2.0f / 3.0f * (SQRT_3_BY_2*(*vb) - SQRT_3_BY_2*(*vc));
+  #ifdef USE_CMSIS_CLARK_PARK
+    arm_clarke_f32(*va, *vb, a, b);
+  #else
+    *a = 2.0f / 3.0f * (*va - 0.5f*(*vb) - 0.5f*(*vc));
+    *b = 2.0f / 3.0f * (SQRT_3_BY_2*(*vb) - SQRT_3_BY_2*(*vc));
+  #endif
 }
 /**
  * @brief      Forward park transformation
+ * @note       Duration: 5.762us, with USE_CMSIS_CLARK_PARK 7.609us
  *
  * @param      a     in: alpha component
  * @param      b     in: beta component
@@ -868,14 +919,19 @@ static void clark (float* va, float* vb, float* vc, float* a, float* b)
 static void park (float* a, float* b, float* theta, float* d, float* q )
 {
   float sin, cos;
-  sin = arm_sin_f32(*theta);
-  cos = arm_cos_f32(*theta);
-  (*d) =  (*a)*cos + (*b)*sin;
-  (*q) = -(*a)*sin + (*b)*cos;
+  #ifdef USE_CMSIS_CLARK_PARK
+    arm_sin_cos_f32(*theta, &sin, &cos);
+    arm_park_f32(*a, *b, d, q, sin, cos);
+  #else
+    sin = arm_sin_f32(*theta);
+    cos = arm_cos_f32(*theta);
+    (*d) =  (*a)*cos + (*b)*sin;
+    (*q) = -(*a)*sin + (*b)*cos;
+  #endif
 }
 /**
  * @brief      Inverse clark transformation
- *
+ * 
  * @param      a     in: alpha component
  * @param      b     in: beta component
  * @param      va    out: a component
@@ -884,12 +940,18 @@ static void park (float* a, float* b, float* theta, float* d, float* q )
  */
 static void invclark (float* a, float* b, float* va, float* vb, float* vc)
 {
-  *va = *a;
-  *vb = 1.0f / 2.0f * (-(*a) + SQRT_3*(*b));
-  *vc = 1.0f / 2.0f * (-(*a) + SQRT_3*(*b));
+  #ifdef USE_CMSIS_CLARK_PARK
+    arm_inv_clarke_f32(*a, *b, va, vb);
+    *vc = *vb;
+  #else
+    *va = *a;
+    *vb = 1.0f / 2.0f * (-(*a) + SQRT_3*(*b));
+    *vc = 1.0f / 2.0f * (-(*a) + SQRT_3*(*b));
+  #endif
 }
 /**
  * @brief      Inverse park transformation
+ * @note       Duration: 5.637us, with USE_CMSIS_CLARK_PARK 7.483us
  *
  * @param      d     in: d component
  * @param      q     in: q component
@@ -900,10 +962,15 @@ static void invclark (float* a, float* b, float* va, float* vb, float* vc)
 static void invpark (float* d, float* q, float* theta, float* a, float* b)
 {
   float sin, cos;
-  sin = arm_sin_f32(*theta);
-  cos = arm_cos_f32(*theta);
-  (*a) = (*d)*cos - (*q)*sin;
-  (*b) = (*q)*cos + (*d)*sin;
+  #ifdef USE_CMSIS_CLARK_PARK
+    arm_sin_cos_f32(*theta, &sin, &cos);
+    arm_inv_park_f32(*d, *q, a, b, sin, cos);
+  #else
+    sin = arm_sin_f32(*theta);
+    cos = arm_cos_f32(*theta);
+    (*a) = (*d)*cos - (*q)*sin;
+    (*b) = (*q)*cos + (*d)*sin;
+  #endif
 }
 /**
  * @brief      Run a non linear observer iteration
@@ -997,6 +1064,66 @@ static void runCurrentController (void)
   // mCtrl.vq_set += mObs.omega_e * mMotParms.psi;
 }
 
+/**
+ * @brief      Calculate output vectors for the Timer and sets new dutycycle
+ * @note       Needs
+ *              mCtrl.vd_set
+ *              mCtrl.vq_set
+ *              mObs.theta
+ *             Calculates
+ *              mCtrl.va_set
+ *              mCtrl.vb_set
+ */ 
+static void runOutputs(void)
+{  
+  uint16_t dutya, dutyb, dutyc;
+  // inverse transform
+  invpark(&mCtrl.vd_set, &mCtrl.vq_set, &mObs.theta, &mCtrl.va_set, &mCtrl.vb_set);
+  // calculate duties
+  utils_saturate_vector_2d(&mCtrl.va_set, &mCtrl.vb_set, SQRT_3_BY_2);
+  svm(&mCtrl.va_set, &mCtrl.vb_set, &dutya, &dutyb, &dutyc);
+  // set output
+  TIMER_UPDATE_DUTY(dutyc, dutyb, dutya);
+}
+/**
+ * @brief      Calculate output vectors for the Timer and sets new dutycycle
+ * @note       Takes the theata as a parameter and ignores the observer theta
+ * @note       Duration ~18us
+ * @note       Needs
+ *              mCtrl.vd_set
+ *              mCtrl.vq_set
+ *             Calculates
+ *              mCtrl.va_set
+ *              mCtrl.vb_set
+ * param[in] theta Rotor position
+ */ 
+static void runOutputsWithoutObserver(float theta)
+{  
+  uint16_t dutya, dutyb, dutyc;
+  // inverse transform
+  invpark(&mCtrl.vd_set, &mCtrl.vq_set, &theta, &mCtrl.va_set, &mCtrl.vb_set); // 5.5us
+  // calculate duties
+  utils_saturate_vector_2d(&mCtrl.va_set, &mCtrl.vb_set, SQRT_3_BY_2); //7.325us
+  svm(&mCtrl.va_set, &mCtrl.vb_set, &dutya, &dutyb, &dutyc); // 3.738us
+  // set output
+  TIMER_UPDATE_DUTY(dutyc, dutyb, dutya); // 0.993us
+}
+/**
+ * @brief      Runs output in forced commutation mode
+ */
+static void forcedCommutation (void)
+{
+  static float t = 0.0;
+  static const float freq = FOC_FORCED_COMM_FREQ;
+  static float theta;
+
+  theta = 2*PI*freq*(t); //800ns
+  mCtrl.vd_set = FOC_FORCED_COMM_VD;
+  mCtrl.vq_set = FOC_FORCED_COMM_VQ;
+  t += ((float)FOC_CURRENT_CONTROLLER_SLOWDOWN / FOC_F_SW);
+  runOutputsWithoutObserver(theta);
+}
+
 /*===========================================================================*/
 /* Interrupt handlers                                                        */
 /*===========================================================================*/
@@ -1029,26 +1156,45 @@ CH_IRQ_HANDLER(Vector88) {
  * @brief      ADC3 IRQ handler
  */
 CH_IRQ_HANDLER(VectorFC) {
-  static uint16_t ctr = 0;
+  static uint16_t istCtr = 0;
   static float dt = 0;
 
+
   CH_IRQ_PROLOGUE();
+  palSetPad(GPIOE,14);
+
   ADC_ClearITPendingBit(ADC3, ADC_IT_EOS);
   ADC3->CR |= ADC_CR_ADSTART;
 
-//palTogglePad(GPIOE,14);
-
-palSetPad(GPIOE,14);
-  chSysLockFromISR();
   dt = 1.0/((float)FOC_F_SW);
 
+  // Current calculation time: 1.944us
   mCtrl.ipa_is = ADC_CURR_A();
   mCtrl.ipb_is = ADC_CURR_B();
   mCtrl.ipc_is = -mCtrl.ipa_is -mCtrl.ipb_is;
-  clark(&mCtrl.ipa_is, &mCtrl.ipb_is, &mCtrl.ipc_is, &mCtrl.ia_is, &mCtrl.ib_is);
-  runPositionObserver(&dt);
-  runSpeedObserver(&dt);
-  chSysUnlockFromISR();
+  clark(&mCtrl.ipa_is, &mCtrl.ipb_is, &mCtrl.ipc_is, &mCtrl.ia_is, &mCtrl.ib_is); //1.727us
+  runPositionObserver(&dt); // 8.765us
+  runSpeedObserver(&dt); // 2.895us
+
+
+  if(++istCtr == FOC_CURRENT_CONTROLLER_SLOWDOWN)
+  {
+    istCtr = 0;
+    // palSetPad(GPIOE,14);
+    chSysLockFromISR();
+    chBSemSignalI(&mIstSem);
+    chSysUnlockFromISR(); 
+
+    // park(&mCtrl.ia_is, &mCtrl.ib_is, &mObs.theta, &mCtrl.id_is, &mCtrl.iq_is);
+    // // run speed controller
+    // runSpeedController();
+    // mCtrl.id_set = 0.0; // override
+    // mCtrl.iq_set = 0.01;
+    // // run current controller
+    // runCurrentController();
+    // runOutputs();
+    forcedCommutation();
+  }
 
 #ifdef DEBUG_ADC
   if(mStoreADC3)
@@ -1063,9 +1209,8 @@ palSetPad(GPIOE,14);
     ctr %= ADC_STORE_DEPTH;
   }
 #endif
-palClearPad(GPIOE,14);
 
-  // mc_interface_adc_inj_int_handler();
+  palClearPad(GPIOE,14);
   CH_IRQ_EPILOGUE();
 }
 
