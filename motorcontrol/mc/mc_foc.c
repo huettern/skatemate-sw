@@ -47,7 +47,9 @@
 /*===========================================================================*/
 // #define DEBUG_ADC
 // #define DEBUG_SVM
-// #define DEBUG_OBSERVER
+#define DEBUG_OBSERVER
+
+#define DEBUG_DOWNSAMPLE_FACTOR 10
 
 /*===========================================================================*/
 /* IMPLEMENTATION SETTINGS                                                   */
@@ -164,7 +166,7 @@ static BSEMAPHORE_DECL(mIstSem, TRUE);
 static volatile uint16_t mADCValueStore[ADC_STORE_DEPTH][8]; // raw converted values
 static volatile uint8_t mStoreADC1, mStoreADC3;
 #ifdef DEBUG_OBSERVER
-  #define OBS_STORE_DEPTH 500
+  #define OBS_STORE_DEPTH 1000
 #else
   #define OBS_STORE_DEPTH 1
 #endif
@@ -987,6 +989,7 @@ static void runPositionObserver(float *dt)
   static float pos_error;
   static float xp[2];
   static uint16_t ctr;
+  static uint16_t downSampleCtr = 0;
 
   mObs.eta[0] = mObs.x[0] - mMotParms.Ls*(mCtrl.ia_is);
   mObs.eta[1] = mObs.x[1] - mMotParms.Ls*(mCtrl.ib_is);
@@ -1009,14 +1012,18 @@ static void runPositionObserver(float *dt)
 #ifdef DEBUG_OBSERVER
   if(mStoreObserver)
   {
-    // copy to store reg
-    ctr %= OBS_STORE_DEPTH;
-    mOBSValueStore[ctr][0] = mCtrl.ia_is;
-    mOBSValueStore[ctr][1] = mCtrl.ib_is;
-    mOBSValueStore[ctr][2] = mCtrl.va_set;
-    mOBSValueStore[ctr][3] = mCtrl.vb_set;
-    mOBSValueStore[ctr++][4] = mObs.theta;
-    if(ctr >= OBS_STORE_DEPTH) mStoreObserver = 0;
+    if(++downSampleCtr == DEBUG_DOWNSAMPLE_FACTOR)
+    {
+      downSampleCtr = 0;
+      // copy to store reg
+      ctr %= OBS_STORE_DEPTH;
+      mOBSValueStore[ctr][0] = mCtrl.ia_is;
+      mOBSValueStore[ctr][1] = mCtrl.ib_is;
+      mOBSValueStore[ctr][2] = mCtrl.va_set;
+      mOBSValueStore[ctr][3] = mCtrl.vb_set;
+      mOBSValueStore[ctr++][4] = mObs.theta;
+      if(ctr >= OBS_STORE_DEPTH) mStoreObserver = 0;
+    }
   }
 #endif
 }
