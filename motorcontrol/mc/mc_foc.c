@@ -47,7 +47,8 @@
 /*===========================================================================*/
 // #define DEBUG_ADC
 // #define DEBUG_SVM
-#define DEBUG_OBSERVER
+// #define DEBUG_OBSERVER
+#define DEBUG_CONTROLLERS
 
 #define DEBUG_DOWNSAMPLE_FACTOR 10
 
@@ -100,15 +101,15 @@
 #define FOC_PARAM_DEFAULT_OBS_SPEED_KP  2000.0  
 #define FOC_PARAM_DEFAULT_OBS_SPEED_KI  20000.0
 #define FOC_PARAM_DEFAULT_OBS_SPEED_KD  0.0
-#define FOC_PARAM_DEFAULT_CURR_D_KP   0.097
-#define FOC_PARAM_DEFAULT_CURR_D_KI   0
-#define FOC_PARAM_DEFAULT_CURR_D_KD   0
-#define FOC_PARAM_DEFAULT_CURR_Q_KP   0.097
-#define FOC_PARAM_DEFAULT_CURR_Q_KI   0
-#define FOC_PARAM_DEFAULT_CURR_Q_KD   0
+#define FOC_PARAM_DEFAULT_CURR_D_KP   0.03
+#define FOC_PARAM_DEFAULT_CURR_D_KI   50.0
+#define FOC_PARAM_DEFAULT_CURR_D_KD   0.0
+#define FOC_PARAM_DEFAULT_CURR_Q_KP   0.03
+#define FOC_PARAM_DEFAULT_CURR_Q_KI   50.0
+#define FOC_PARAM_DEFAULT_CURR_Q_KD   0.0
 #define FOC_PARAM_DEFAULT_SPEED_KP    0.1
-#define FOC_PARAM_DEFAULT_SPEED_KI    0
-#define FOC_PARAM_DEFAULT_SPEED_KD    0
+#define FOC_PARAM_DEFAULT_SPEED_KI    0.0
+#define FOC_PARAM_DEFAULT_SPEED_KD    0.0
 /**
  * @brief      Resistor divider for voltage measurements
  */
@@ -172,7 +173,16 @@ static volatile uint8_t mStoreADC1, mStoreADC3;
 #endif
 static volatile float mOBSValueStore[OBS_STORE_DEPTH][6];
 static volatile uint8_t mStoreObserver;
+#ifdef DEBUG_CONTROLLERS
+  #define CONT_STORE_DEPTH 800
+#else
+  #define CONT_STORE_DEPTH 1
+#endif
+static volatile float mContValueStore[CONT_STORE_DEPTH][8];
+static volatile uint8_t mStoreController;
+static uint16_t mControllerDebugCtr;
 
+static uint8_t mForcedCommutationMode = 1;
 
 /*===========================================================================*/
 /* macros                                                                    */
@@ -609,7 +619,7 @@ static THD_FUNCTION(mcfocMainThread, arg) {
   while (true) {
     // override values
 // palSetPad(GPIOE,14);
-    chBSemWait(&mIstSem);
+    // chBSemWait(&mIstSem);
 // palSetPad(GPIOE,14);
 //     theta = 2*PI*freq*(t); //800ns
 //     mCtrl.vd_set = 0;
@@ -617,7 +627,8 @@ static THD_FUNCTION(mcfocMainThread, arg) {
 //     t += ((float)FOC_CURRENT_CONTROLLER_SLOWDOWN / FOC_F_SW);
 //     runOutputsWithoutObserver(theta);
 // palClearPad(GPIOE,14);
-    // chThdSleepMicroseconds(FOC_THREAD_INTERVAL);
+    chThdSleepMilliseconds(3000);
+
 
     // theta = 2*PI*freq*(t/1000000); //800ns
     // invpark(&mCtrl.vd_set, &mCtrl.vq_set, &theta, &mCtrl.va_set, &mCtrl.vb_set); // 5.5us
@@ -673,6 +684,21 @@ static THD_FUNCTION(mcfocSecondaryThread, arg)
       {
         DBG3("%.3f %.3f %.3f %.3f %.3f %.3f\r\n", mOBSValueStore[i][0], mOBSValueStore[i][1], 
           mOBSValueStore[i][2], mOBSValueStore[i][3], mOBSValueStore[i][4], mOBSValueStore[i][5]);
+      } 
+    // observer debug
+      // DBG3("%.3f %.3f %.3f %.3f\r\n", mObs.omega_e, mObs.theta, mCtrl.va_set, mCtrl.vb_set);
+    #endif
+    #ifdef DEBUG_CONTROLLERS
+      chThdSleepMilliseconds(5000);
+      mStoreController = 1;
+      chThdSleepMilliseconds(1);
+      while(mStoreController) chThdSleepMilliseconds(1);
+      mForcedCommutationMode = 1;
+      for(i = 0; i < CONT_STORE_DEPTH; i++)
+      {
+        DBG3("%.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f\r\n", mContValueStore[i][0], mContValueStore[i][1], 
+          mContValueStore[i][2], mContValueStore[i][3], mContValueStore[i][4], mContValueStore[i][5], 
+          mContValueStore[i][6], mContValueStore[i][7]);
       } 
     // observer debug
       // DBG3("%.3f %.3f %.3f %.3f\r\n", mObs.omega_e, mObs.theta, mCtrl.va_set, mCtrl.vb_set);
@@ -1070,6 +1096,29 @@ static void runCurrentController (void)
   // mCtrl.vd_set -= mObs.omega_e * mMotParms.Ls;
   // mCtrl.vq_set += mObs.omega_e * mMotParms.Ls;
   // mCtrl.vq_set += mObs.omega_e * mMotParms.psi;
+  // 
+
+#ifdef DEBUG_CONTROLLERS
+  static uint16_t downSampleCtr = 0;
+  if(mStoreController)
+  {
+    if(++downSampleCtr == DEBUG_DOWNSAMPLE_FACTOR)
+    {
+      downSampleCtr = 0;
+      // copy to store reg
+      mControllerDebugCtr %= CONT_STORE_DEPTH;
+      mContValueStore[mControllerDebugCtr][0] = mObs.omega_m;
+      mContValueStore[mControllerDebugCtr][1] = mCtrl.w_set;
+      mContValueStore[mControllerDebugCtr][2] = mCtrl.id_is;
+      mContValueStore[mControllerDebugCtr][3] = mCtrl.id_set;
+      mContValueStore[mControllerDebugCtr][4] = mCtrl.iq_is;
+      mContValueStore[mControllerDebugCtr][5] = mCtrl.iq_set;
+      mContValueStore[mControllerDebugCtr][6] = mCtrl.vd_set;
+      mContValueStore[mControllerDebugCtr++][7] = mCtrl.vd_set;
+      if(mControllerDebugCtr >= CONT_STORE_DEPTH) mStoreController = 0;
+    }
+  }
+#endif
 }
 
 /**
@@ -1197,13 +1246,25 @@ CH_IRQ_HANDLER(VectorFC) {
     // run speed controller
     runSpeedController();
     mCtrl.id_set = 0.0; // override
-    mCtrl.iq_set = 0.001;
+    mCtrl.iq_set = -30.0;
     // run current controller
+    // Force a step for the current controller
+      if((mControllerDebugCtr < (CONT_STORE_DEPTH/2)) || (!mStoreController))
+      {
+        mForcedCommutationMode = 1;
+      }
+      else
+      {
+        mForcedCommutationMode = 0;
+      }
     runCurrentController();
-    mCtrl.vd_set = FOC_FORCED_COMM_VD; // override
-    mCtrl.vq_set = FOC_FORCED_COMM_VQ;
-    runOutputs();
-    // forcedCommutation();
+    // mCtrl.vd_set = FOC_FORCED_COMM_VD; // override
+    // mCtrl.vq_set = FOC_FORCED_COMM_VQ;
+    if(mForcedCommutationMode)
+      forcedCommutation();
+    else
+      runOutputs();
+    
   }
 
 #ifdef DEBUG_ADC
