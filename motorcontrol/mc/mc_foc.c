@@ -87,10 +87,10 @@
 /**
  * Motor default parameters
  */
-#define FOC_MOTOR_DEFAULT_PSI 0.003
+#define FOC_MOTOR_DEFAULT_PSI 0.008
 #define FOC_MOTOR_DEFAULT_P   7
-#define FOC_MOTOR_DEFAULT_LS  10e-6
-#define FOC_MOTOR_DEFAULT_RS  15e-3
+#define FOC_MOTOR_DEFAULT_LS  18e-6
+#define FOC_MOTOR_DEFAULT_RS  1.2
 #define FOC_MOTOR_DEFAULT_J   150e-6
 
 /**
@@ -170,7 +170,7 @@ static volatile uint8_t mStoreADC1, mStoreADC3;
 #else
   #define OBS_STORE_DEPTH 1
 #endif
-static volatile float mOBSValueStore[OBS_STORE_DEPTH][5];
+static volatile float mOBSValueStore[OBS_STORE_DEPTH][6];
 static volatile uint8_t mStoreObserver;
 
 
@@ -671,8 +671,8 @@ static THD_FUNCTION(mcfocSecondaryThread, arg)
       while(mStoreObserver) chThdSleepMilliseconds(1);
       for(i = 0; i < OBS_STORE_DEPTH; i++)
       {
-        DBG3("%.3f %.3f %.3f %.3f %.3f\r\n", mOBSValueStore[i][0], mOBSValueStore[i][1], 
-          mOBSValueStore[i][2], mOBSValueStore[i][3], mOBSValueStore[i][4]);
+        DBG3("%.3f %.3f %.3f %.3f %.3f %.3f\r\n", mOBSValueStore[i][0], mOBSValueStore[i][1], 
+          mOBSValueStore[i][2], mOBSValueStore[i][3], mOBSValueStore[i][4], mOBSValueStore[i][5]);
       } 
     // observer debug
       // DBG3("%.3f %.3f %.3f %.3f\r\n", mObs.omega_e, mObs.theta, mCtrl.va_set, mCtrl.vb_set);
@@ -988,8 +988,6 @@ static void runPositionObserver(float *dt)
 {
   static float pos_error;
   static float xp[2];
-  static uint16_t ctr;
-  static uint16_t downSampleCtr = 0;
 
   mObs.eta[0] = mObs.x[0] - mMotParms.Ls*(mCtrl.ia_is);
   mObs.eta[1] = mObs.x[1] - mMotParms.Ls*(mCtrl.ib_is);
@@ -1008,6 +1006,23 @@ static void runPositionObserver(float *dt)
 
   mObs.theta = utilFastAtan2((mObs.x[1] - mMotParms.Ls*(mCtrl.ib_is)), 
     (mObs.x[0] - mMotParms.Ls*(mCtrl.ia_is) ));
+}
+/**
+ * @brief      Estimates the rotor speed using a PLL
+ * @note       Based on IEEE 2010 Position Estimator using a Nonlinear Observer
+ *
+ * @param      dt    in: time delta since last call
+ */
+static void runSpeedObserver (float *dt)
+{
+  static float err;
+  static uint16_t ctr;
+  static uint16_t downSampleCtr = 0;
+
+  err = mObs.theta - mObs.theta_var;
+  mObs.omega_e = arm_pid_f32(&mObs.speedPID, err);
+  mObs.theta_var += mObs.omega_e * (*dt);
+  mObs.omega_m = mObs.omega_e * (60.0 / 2.0 / PI / mMotParms.p);
 
 #ifdef DEBUG_OBSERVER
   if(mStoreObserver)
@@ -1021,26 +1036,12 @@ static void runPositionObserver(float *dt)
       mOBSValueStore[ctr][1] = mCtrl.ib_is;
       mOBSValueStore[ctr][2] = mCtrl.va_set;
       mOBSValueStore[ctr][3] = mCtrl.vb_set;
-      mOBSValueStore[ctr++][4] = mObs.theta;
+      mOBSValueStore[ctr][4] = mObs.theta;
+      mOBSValueStore[ctr++][5] = mObs.omega_m;
       if(ctr >= OBS_STORE_DEPTH) mStoreObserver = 0;
     }
   }
 #endif
-}
-/**
- * @brief      Estimates the rotor speed using a PLL
- * @note       Based on IEEE 2010 Position Estimator using a Nonlinear Observer
- *
- * @param      dt    in: time delta since last call
- */
-static void runSpeedObserver (float *dt)
-{
-  static float err;
-
-  err = mObs.theta - mObs.theta_var;
-  mObs.omega_e = arm_pid_f32(&mObs.speedPID, err);
-  mObs.theta_var += mObs.omega_e * (*dt);
-  mObs.omega_m = mObs.omega_e * (60.0 / 2.0 / PI / mMotParms.p);
 }
 /**
  * @brief      Runs the speed controller, calculates id_set and iq_set
@@ -1192,15 +1193,17 @@ CH_IRQ_HANDLER(VectorFC) {
     chBSemSignalI(&mIstSem);
     chSysUnlockFromISR(); 
 
-    // park(&mCtrl.ia_is, &mCtrl.ib_is, &mObs.theta, &mCtrl.id_is, &mCtrl.iq_is);
-    // // run speed controller
-    // runSpeedController();
-    // mCtrl.id_set = 0.0; // override
-    // mCtrl.iq_set = 0.01;
-    // // run current controller
-    // runCurrentController();
-    // runOutputs();
-    forcedCommutation();
+    park(&mCtrl.ia_is, &mCtrl.ib_is, &mObs.theta, &mCtrl.id_is, &mCtrl.iq_is);
+    // run speed controller
+    runSpeedController();
+    mCtrl.id_set = 0.0; // override
+    mCtrl.iq_set = 0.001;
+    // run current controller
+    runCurrentController();
+    mCtrl.vd_set = FOC_FORCED_COMM_VD; // override
+    mCtrl.vq_set = FOC_FORCED_COMM_VQ;
+    runOutputs();
+    // forcedCommutation();
   }
 
 #ifdef DEBUG_ADC
