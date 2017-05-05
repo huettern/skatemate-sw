@@ -47,8 +47,8 @@
 /*===========================================================================*/
 // #define DEBUG_ADC
 // #define DEBUG_SVM
- #define DEBUG_OBSERVER
-//#define DEBUG_CONTROLLERS
+//#define DEBUG_OBSERVER
+#define DEBUG_CONTROLLERS
 
 #define DEBUG_DOWNSAMPLE_FACTOR 10
 
@@ -81,7 +81,7 @@
 /**
  * Forced commutation settings
  */
-#define FOC_FORCED_COMM_FREQ 80.0
+#define FOC_FORCED_COMM_FREQ -30.0
 #define FOC_FORCED_COMM_VD 0.0
 #define FOC_FORCED_COMM_VQ 0.07
 
@@ -101,15 +101,17 @@
 #define FOC_PARAM_DEFAULT_OBS_SPEED_KP  2000.0  
 #define FOC_PARAM_DEFAULT_OBS_SPEED_KI  20000.0
 #define FOC_PARAM_DEFAULT_OBS_SPEED_KD  0.0
+#define FOC_PARAM_DEFAULT_OBS_SPEED_CEIL     6.0
+#define FOC_PARAM_DEFAULT_OBS_SPEED_FLOOR    -6.0
 
 #define FOC_PARAM_DEFAULT_CURR_D_KP   0.03
-#define FOC_PARAM_DEFAULT_CURR_D_KI   0.0
+#define FOC_PARAM_DEFAULT_CURR_D_KI   0.001
 #define FOC_PARAM_DEFAULT_CURR_D_KD   0.0
 #define FOC_PARAM_DEFAULT_CURR_D_I_CEIL     1.0
 #define FOC_PARAM_DEFAULT_CURR_D_I_FLOOR    -1.0
 
 #define FOC_PARAM_DEFAULT_CURR_Q_KP   0.03
-#define FOC_PARAM_DEFAULT_CURR_Q_KI   0.0
+#define FOC_PARAM_DEFAULT_CURR_Q_KI   0.001
 #define FOC_PARAM_DEFAULT_CURR_Q_KD   0.0
 #define FOC_PARAM_DEFAULT_CURR_Q_I_CEIL     1.0
 #define FOC_PARAM_DEFAULT_CURR_Q_I_FLOOR    -1.0
@@ -194,6 +196,7 @@ static volatile uint8_t mStoreADC1, mStoreADC3;
 #endif
 static volatile float mOBSValueStore[OBS_STORE_DEPTH][6];
 static volatile uint8_t mStoreObserver;
+static uint16_t mObsDebugCounter;
 #ifdef DEBUG_CONTROLLERS
   #define CONT_STORE_DEPTH 800
 #else
@@ -207,6 +210,7 @@ static uint8_t mForcedCommutationMode = 1;
 
 static piStruct_t mpiId;
 static piStruct_t mpiIq;
+static piStruct_t mpiSpeed;
 
 /*===========================================================================*/
 /* macros                                                                    */
@@ -796,11 +800,18 @@ static void dataInit(void)
   mpiId.istate = 0;
   mpiId.iceil = FOC_PARAM_DEFAULT_CURR_D_I_CEIL;
   mpiId.ifloor = FOC_PARAM_DEFAULT_CURR_D_I_FLOOR;
+
   mpiIq.kp = FOC_PARAM_DEFAULT_CURR_Q_KP;
   mpiIq.ki = FOC_PARAM_DEFAULT_CURR_Q_KI;
   mpiIq.istate = 0;
   mpiIq.iceil = FOC_PARAM_DEFAULT_CURR_Q_I_CEIL;
   mpiIq.ifloor = FOC_PARAM_DEFAULT_CURR_Q_I_FLOOR;
+
+  mpiSpeed.kp = mFOCParms.obsSpeed_kp;
+  mpiSpeed.ki = mFOCParms.obsSpeed_ki;
+  mpiSpeed.istate = 0;
+  mpiSpeed.iceil = FOC_PARAM_DEFAULT_OBS_SPEED_CEIL;
+  mpiSpeed.ifloor = FOC_PARAM_DEFAULT_OBS_SPEED_FLOOR;
 }
 /**
  * @brief      Calibrates all analog signals
@@ -1083,14 +1094,16 @@ static void runPositionObserver(float *dt)
  */
 static void runSpeedObserver (float *dt)
 {
-  static float err;
-  static uint16_t ctr;
-  static uint16_t downSampleCtr = 0;
+  static float err, wm;
 
   err = mObs.theta - mObs.theta_var;
-  mObs.omega_e = arm_pid_f32(&mObs.speedPID, err);
+  utils_norm_angle_rad(&err);
+  // mObs.omega_e = arm_pid_f32(&mObs.speedPID, err);
+  mObs.omega_e = piController(&mpiSpeed, err, dt);
   mObs.theta_var += mObs.omega_e * (*dt);
-  mObs.omega_m = mObs.omega_e * (60.0 / 2.0 / PI / mMotParms.p);
+  utils_norm_angle_rad(&mObs.theta_var);
+  wm = mObs.omega_e * (60.0 / 2.0 / PI / mMotParms.p);
+  UTIL_LP_FAST(mObs.omega_m, wm, 0.0005);
 
 #ifdef DEBUG_OBSERVER
   if(mStoreObserver)
@@ -1099,14 +1112,15 @@ static void runSpeedObserver (float *dt)
     {
       downSampleCtr = 0;
       // copy to store reg
-      ctr %= OBS_STORE_DEPTH;
-      mOBSValueStore[ctr][0] = mCtrl.ia_is;
-      mOBSValueStore[ctr][1] = mCtrl.ib_is;
-      mOBSValueStore[ctr][2] = mCtrl.va_set;
-      mOBSValueStore[ctr][3] = mCtrl.vb_set;
-      mOBSValueStore[ctr][4] = mObs.theta;
-      mOBSValueStore[ctr++][5] = mObs.omega_m;
-      if(ctr >= OBS_STORE_DEPTH) mStoreObserver = 0;
+      mObsDebugCounter %= OBS_STORE_DEPTH;
+      mOBSValueStore[mObsDebugCounter][0] = mCtrl.ia_is;
+      mOBSValueStore[mObsDebugCounter][1] = mCtrl.ib_is;
+      mOBSValueStore[mObsDebugCounter][2] = mCtrl.va_set;
+      mOBSValueStore[mObsDebugCounter][3] = mCtrl.vb_set;
+      mOBSValueStore[mObsDebugCounter][4] = mObs.theta;
+      mOBSValueStore[mObsDebugCounter][5] = mObs.omega_m;
+      mObsDebugCounter++;
+      if(mObsDebugCounter >= OBS_STORE_DEPTH) mStoreObserver = 0;
     }
   }
 #endif
@@ -1294,16 +1308,16 @@ CH_IRQ_HANDLER(VectorFC) {
     // run speed controller
     runSpeedController();
     mCtrl.id_set = 0.0; // override
-    mCtrl.iq_set = -3.0;
+    mCtrl.iq_set = -10.0;
     // run current controller
     // Force a step for the current controller
       if((mControllerDebugCtr < (CONT_STORE_DEPTH/3)) || (!mStoreController))
+      // if((mObsDebugCounter < (OBS_STORE_DEPTH/3)) || (!mStoreObserver))
       {
-        mForcedCommutationMode = 1;
+        // mForcedCommutationMode = 1;
       }
       else
       {
-
         mForcedCommutationMode = 0;
       }
     runCurrentController(&dt);

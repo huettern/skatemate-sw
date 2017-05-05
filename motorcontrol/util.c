@@ -188,5 +188,23 @@ bool utils_saturate_vector_2d(float *x, float *y, float max) {
   return retval;
 }
 
+/**
+ * @brief      Make sure that -pi <= angle < pi,
+ *
+ * @param      angle  The angle
+ */
+void utils_norm_angle_rad(float *angle) 
+{
+  while (*angle < -PI) 
+  {
+    *angle += 2.0 * PI;
+  }
+
+  while (*angle >  PI) 
+  {
+    *angle -= 2.0 * PI;
+  }
+}
+
 /** @} */
 

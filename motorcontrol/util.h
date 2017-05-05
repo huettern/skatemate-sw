@@ -58,7 +58,7 @@ size_t getThdWaSize(thread_t *tp);
 
 float utilFastAtan2(float y, float x);
 bool utils_saturate_vector_2d(float *x, float *y, float max);
-
+void utils_norm_angle_rad(float *angle);
 
 
 /** @} */
