@@ -81,7 +81,7 @@
 /**
  * Forced commutation settings
  */
-#define FOC_FORCED_COMM_FREQ 70.0
+#define FOC_FORCED_COMM_FREQ 80.0
 #define FOC_FORCED_COMM_VD 0.0
 #define FOC_FORCED_COMM_VQ 0.07
 
@@ -90,9 +90,9 @@
  */
 #define FOC_MOTOR_DEFAULT_PSI 0.008
 #define FOC_MOTOR_DEFAULT_P   7
-#define FOC_MOTOR_DEFAULT_LS  18e-6
-#define FOC_MOTOR_DEFAULT_RS  1.2
-#define FOC_MOTOR_DEFAULT_J   150e-6
+#define FOC_MOTOR_DEFAULT_LS  18.0e-6 // Lumenier: 12e-6
+#define FOC_MOTOR_DEFAULT_RS  1.2 // Lumenier: 0.06
+#define FOC_MOTOR_DEFAULT_J   150e-6 // not used
 
 /**
  * FOC defautl parameters
@@ -1263,6 +1263,7 @@ CH_IRQ_HANDLER(VectorFC) {
 
 
   CH_IRQ_PROLOGUE();
+  palSetPad(GPIOE,14);
 
   ADC_ClearITPendingBit(ADC3, ADC_IT_EOS);
   ADC3->CR |= ADC_CR_ADSTART;
@@ -1298,13 +1299,11 @@ CH_IRQ_HANDLER(VectorFC) {
     // Force a step for the current controller
       if((mControllerDebugCtr < (CONT_STORE_DEPTH/3)) || (!mStoreController))
       {
-  palClearPad(GPIOE,14);
         mForcedCommutationMode = 1;
       }
       else
       {
 
-  palSetPad(GPIOE,14);
         mForcedCommutationMode = 0;
       }
     runCurrentController(&dt);
@@ -1331,6 +1330,7 @@ CH_IRQ_HANDLER(VectorFC) {
   }
 #endif
 
+  palClearPad(GPIOE,14);
   CH_IRQ_EPILOGUE();
 }
 
