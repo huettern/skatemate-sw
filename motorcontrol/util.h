@@ -21,6 +21,32 @@
 #define SQRT_3        (1.7320508f)
 // #define PI (3.1415927f) // defined in arm_math
 
+/*===========================================================================*/
+/* Macros 	                                                                 */
+/*===========================================================================*/
+/**
+ * A simple low pass filter.
+ *
+ * @param value
+ * The filtered value.
+ *
+ * @param sample
+ * Next sample.
+ *
+ * @param filter_constant
+ * Filter constant. Range 0.0 to 1.0, where 1.0 gives the unfiltered value.
+ */
+
+/**
+ * @brief      Simple low pass filter
+ *
+ * @param      value            filtered value
+ * @param      sample           input sample
+ * @param      filter_constant  The filter constant: lower equals more filtering
+ *
+ * @return     Filtered value. filter_constant is a factor between 0.0 to 1.0
+ */
+#define UTIL_LP_FAST(value, sample, filter_constant) (value -= (filter_constant) * (value - (sample)))
 
 /*===========================================================================*/
 /* UTIL public functions.                                                    */

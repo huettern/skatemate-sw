@@ -47,8 +47,8 @@
 /*===========================================================================*/
 // #define DEBUG_ADC
 // #define DEBUG_SVM
-// #define DEBUG_OBSERVER
-#define DEBUG_CONTROLLERS
+ #define DEBUG_OBSERVER
+//#define DEBUG_CONTROLLERS
 
 #define DEBUG_DOWNSAMPLE_FACTOR 10
 
@@ -101,15 +101,24 @@
 #define FOC_PARAM_DEFAULT_OBS_SPEED_KP  2000.0  
 #define FOC_PARAM_DEFAULT_OBS_SPEED_KI  20000.0
 #define FOC_PARAM_DEFAULT_OBS_SPEED_KD  0.0
+
 #define FOC_PARAM_DEFAULT_CURR_D_KP   0.03
-#define FOC_PARAM_DEFAULT_CURR_D_KI   50.0
+#define FOC_PARAM_DEFAULT_CURR_D_KI   0.0
 #define FOC_PARAM_DEFAULT_CURR_D_KD   0.0
+#define FOC_PARAM_DEFAULT_CURR_D_I_CEIL     1.0
+#define FOC_PARAM_DEFAULT_CURR_D_I_FLOOR    -1.0
+
 #define FOC_PARAM_DEFAULT_CURR_Q_KP   0.03
-#define FOC_PARAM_DEFAULT_CURR_Q_KI   50.0
+#define FOC_PARAM_DEFAULT_CURR_Q_KI   0.0
 #define FOC_PARAM_DEFAULT_CURR_Q_KD   0.0
+#define FOC_PARAM_DEFAULT_CURR_Q_I_CEIL     1.0
+#define FOC_PARAM_DEFAULT_CURR_Q_I_FLOOR    -1.0
+
 #define FOC_PARAM_DEFAULT_SPEED_KP    0.1
 #define FOC_PARAM_DEFAULT_SPEED_KI    0.0
 #define FOC_PARAM_DEFAULT_SPEED_KD    0.0
+
+#define FOC_LP_FAST_CONSTANT 0.1
 /**
  * @brief      Resistor divider for voltage measurements
  */
@@ -128,6 +137,18 @@
 #define ADC_CH_CURR_B  4
 #define ADC_CH_TEMP    6
 #define ADC_CH_REF     7
+
+/*===========================================================================*/
+/* private datatypes                                                         */
+/*===========================================================================*/
+typedef struct {
+  float kp;
+  float ki;
+  float istate;
+  float iceil;
+  float ifloor;
+} piStruct_t;
+
 
 /*===========================================================================*/
 /* private data                                                              */
@@ -183,6 +204,9 @@ static volatile uint8_t mStoreController;
 static uint16_t mControllerDebugCtr;
 
 static uint8_t mForcedCommutationMode = 1;
+
+static piStruct_t mpiId;
+static piStruct_t mpiIq;
 
 /*===========================================================================*/
 /* macros                                                                    */
@@ -248,11 +272,12 @@ static void clark (float* va, float* vb, float* vc, float* a, float* b);
 static void park (float* a, float* b, float* theta, float* d, float* q );
 static void invclark (float* a, float* b, float* va, float* vb, float* vc);
 static void invpark (float* d, float* q, float* theta, float* a, float* b);
+static float piController(piStruct_t* s, float sample, float* dt);
 
 static void runPositionObserver(float *dt);
 static void runSpeedObserver (float *dt);
 static void runSpeedController (void);
-static void runCurrentController (void);
+static void runCurrentController (float *dt);
 static void runOutputs(void);
 static void runOutputsWithoutObserver(float theta);
 static void forcedCommutation (void);
@@ -628,7 +653,7 @@ static THD_FUNCTION(mcfocMainThread, arg) {
 //     runOutputsWithoutObserver(theta);
 // palClearPad(GPIOE,14);
     chThdSleepMilliseconds(3000);
-
+// mForcedCommutationMode = 0;
 
     // theta = 2*PI*freq*(t/1000000); //800ns
     // invpark(&mCtrl.vd_set, &mCtrl.vq_set, &theta, &mCtrl.va_set, &mCtrl.vb_set); // 5.5us
@@ -689,11 +714,10 @@ static THD_FUNCTION(mcfocSecondaryThread, arg)
       // DBG3("%.3f %.3f %.3f %.3f\r\n", mObs.omega_e, mObs.theta, mCtrl.va_set, mCtrl.vb_set);
     #endif
     #ifdef DEBUG_CONTROLLERS
-      chThdSleepMilliseconds(5000);
+      chThdSleepMilliseconds(3000);
       mStoreController = 1;
       chThdSleepMilliseconds(1);
       while(mStoreController) chThdSleepMilliseconds(1);
-      mForcedCommutationMode = 1;
       for(i = 0; i < CONT_STORE_DEPTH; i++)
       {
         DBG3("%.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f\r\n", mContValueStore[i][0], mContValueStore[i][1], 
@@ -766,6 +790,17 @@ static void dataInit(void)
   mCtrl.iqPID.Ki = mFOCParms.curr_q_ki;
   mCtrl.iqPID.Kd = mFOCParms.curr_q_kd;
   arm_pid_init_f32(&mCtrl.iqPID, true);
+
+  mpiId.kp = FOC_PARAM_DEFAULT_CURR_D_KP;
+  mpiId.ki = FOC_PARAM_DEFAULT_CURR_D_KI;
+  mpiId.istate = 0;
+  mpiId.iceil = FOC_PARAM_DEFAULT_CURR_D_I_CEIL;
+  mpiId.ifloor = FOC_PARAM_DEFAULT_CURR_D_I_FLOOR;
+  mpiIq.kp = FOC_PARAM_DEFAULT_CURR_Q_KP;
+  mpiIq.ki = FOC_PARAM_DEFAULT_CURR_Q_KI;
+  mpiIq.istate = 0;
+  mpiIq.iceil = FOC_PARAM_DEFAULT_CURR_Q_I_CEIL;
+  mpiIq.ifloor = FOC_PARAM_DEFAULT_CURR_Q_I_FLOOR;
 }
 /**
  * @brief      Calibrates all analog signals
@@ -1000,6 +1035,13 @@ static void invpark (float* d, float* q, float* theta, float* a, float* b)
     (*b) = (*q)*cos + (*d)*sin;
   #endif
 }
+static float piController(piStruct_t* s, float sample, float* dt)
+{
+  s->istate += s->ki * sample * (*dt);
+  if(s->istate > s->iceil) s->istate = s->iceil;
+  if(s->istate < s->ifloor) s->istate = s->ifloor;
+  return (s->kp*sample) + (s->istate);
+}
 /**
  * @brief      Run a non linear observer iteration
  * @note       Based on IEEE 2010 Position Estimator using a Nonlinear Observer
@@ -1083,15 +1125,17 @@ static void runSpeedController (void)
 /**
  * @brief      Runs the current controller. Calculates vd and vq
  */
-static void runCurrentController (void)
+static void runCurrentController (float* dt)
 {
   static float d_err, q_err;
 
   d_err = mCtrl.id_set - mCtrl.id_is;
   q_err = mCtrl.iq_set - mCtrl.iq_is;
 
-  mCtrl.vd_set = arm_pid_f32(&mCtrl.idPID, d_err);
-  mCtrl.vq_set = arm_pid_f32(&mCtrl.iqPID, q_err);
+  // mCtrl.vd_set = arm_pid_f32(&mCtrl.idPID, d_err);
+  // mCtrl.vq_set = arm_pid_f32(&mCtrl.iqPID, q_err);
+  mCtrl.vd_set = piController(&mpiId, d_err, dt);
+  mCtrl.vq_set = piController(&mpiIq, q_err, dt);
 
   // mCtrl.vd_set -= mObs.omega_e * mMotParms.Ls;
   // mCtrl.vq_set += mObs.omega_e * mMotParms.Ls;
@@ -1114,7 +1158,7 @@ static void runCurrentController (void)
       mContValueStore[mControllerDebugCtr][4] = mCtrl.iq_is;
       mContValueStore[mControllerDebugCtr][5] = mCtrl.iq_set;
       mContValueStore[mControllerDebugCtr][6] = mCtrl.vd_set;
-      mContValueStore[mControllerDebugCtr++][7] = mCtrl.vd_set;
+      mContValueStore[mControllerDebugCtr++][7] = mCtrl.vq_set;
       if(mControllerDebugCtr >= CONT_STORE_DEPTH) mStoreController = 0;
     }
   }
@@ -1215,10 +1259,10 @@ CH_IRQ_HANDLER(Vector88) {
 CH_IRQ_HANDLER(VectorFC) {
   static uint16_t istCtr = 0;
   static float dt = 0;
+  static float id, iq;
 
 
   CH_IRQ_PROLOGUE();
-  palSetPad(GPIOE,14);
 
   ADC_ClearITPendingBit(ADC3, ADC_IT_EOS);
   ADC3->CR |= ADC_CR_ADSTART;
@@ -1242,22 +1286,28 @@ CH_IRQ_HANDLER(VectorFC) {
     chBSemSignalI(&mIstSem);
     chSysUnlockFromISR(); 
 
-    park(&mCtrl.ia_is, &mCtrl.ib_is, &mObs.theta, &mCtrl.id_is, &mCtrl.iq_is);
+    park(&mCtrl.ia_is, &mCtrl.ib_is, &mObs.theta, &id, &iq);
+    // Filter
+    UTIL_LP_FAST(mCtrl.id_is, id, FOC_LP_FAST_CONSTANT);
+    UTIL_LP_FAST(mCtrl.iq_is, iq, FOC_LP_FAST_CONSTANT);
     // run speed controller
     runSpeedController();
     mCtrl.id_set = 0.0; // override
-    mCtrl.iq_set = -30.0;
+    mCtrl.iq_set = -3.0;
     // run current controller
     // Force a step for the current controller
-      if((mControllerDebugCtr < (CONT_STORE_DEPTH/2)) || (!mStoreController))
+      if((mControllerDebugCtr < (CONT_STORE_DEPTH/3)) || (!mStoreController))
       {
+  palClearPad(GPIOE,14);
         mForcedCommutationMode = 1;
       }
       else
       {
+
+  palSetPad(GPIOE,14);
         mForcedCommutationMode = 0;
       }
-    runCurrentController();
+    runCurrentController(&dt);
     // mCtrl.vd_set = FOC_FORCED_COMM_VD; // override
     // mCtrl.vq_set = FOC_FORCED_COMM_VQ;
     if(mForcedCommutationMode)
@@ -1281,7 +1331,6 @@ CH_IRQ_HANDLER(VectorFC) {
   }
 #endif
 
-  palClearPad(GPIOE,14);
   CH_IRQ_EPILOGUE();
 }
 
