@@ -168,17 +168,20 @@ float utilFastAtan2(float y, float x) {
  *
  * @return True if saturation happened, false otherwise
  */
-bool utils_saturate_vector_2d(float *x, float *y, float max) {
+bool utils_saturate_vector_2d(float *x, float *y, float max) 
+{
   bool retval = false;
   float mag = sqrtf(*x * *x + *y * *y);
   // arm_sqrt_f32(*x * *x + *y * *y, &mag);
   max = fabsf(max);
 
-  if (mag < 1e-10) {
+  if (mag < 1e-10) 
+  {
     mag = 1e-10;
   }
 
-  if (mag > max) {
+  if (mag > max) 
+  {
     const float f = max / mag;
     *x *= f;
     *y *= f;
@@ -203,6 +206,88 @@ void utils_norm_angle_rad(float *angle)
   while (*angle >  PI) 
   {
     *angle -= 2.0 * PI;
+  }
+}
+
+/**
+ * @brief      Fast sine and cosine implementation.
+ * @note       See http://lab.polygonal.de/?p=205
+ * @note       WARNING: Don't use too large angles.
+ *
+ * @param[in]  angle  The angle in radians
+ * @param      sin    The sine in radians
+ * @param      cos    The cosine in radians
+ */
+void sincos_fast(float angle, float *sin, float *cos)
+{
+  //always wrap input angle to -PI..PI
+  while (angle < -PI) 
+  {
+    angle += 2.0 * PI;
+  }
+  while (angle >  PI) 
+  {
+    angle -= 2.0 * PI;
+  }
+
+  //compute sine
+  if (angle < 0.0) 
+  {
+    *sin = 1.27323954 * angle + 0.405284735 * angle * angle;
+
+    if (*sin < 0.0) 
+    {
+      *sin = 0.225 * (*sin * -*sin - *sin) + *sin;
+    } else 
+    {
+      *sin = 0.225 * (*sin * *sin - *sin) + *sin;
+    }
+  } 
+  else 
+  {
+    *sin = 1.27323954 * angle - 0.405284735 * angle * angle;
+
+    if (*sin < 0.0) 
+    {
+      *sin = 0.225 * (*sin * -*sin - *sin) + *sin;
+    } 
+    else 
+    {
+      *sin = 0.225 * (*sin * *sin - *sin) + *sin;
+    }
+  }
+
+  // compute cosine: sin(x + PI/2) = cos(x)
+  angle += 0.5 * PI;
+  if (angle >  PI) 
+  {
+    angle -= 2.0 * PI;
+  }
+
+  if (angle < 0.0) 
+  {
+    *cos = 1.27323954 * angle + 0.405284735 * angle * angle;
+
+    if (*cos < 0.0) 
+    {
+      *cos = 0.225 * (*cos * -*cos - *cos) + *cos;
+    } 
+    else 
+    {
+      *cos = 0.225 * (*cos * *cos - *cos) + *cos;
+    }
+  } else 
+  {
+    *cos = 1.27323954 * angle - 0.405284735 * angle * angle;
+
+    if (*cos < 0.0) 
+    {
+      *cos = 0.225 * (*cos * -*cos - *cos) + *cos;
+    } 
+    else 
+    {
+      *cos = 0.225 * (*cos * *cos - *cos) + *cos;
+    }
   }
 }
 

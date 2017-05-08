@@ -105,13 +105,13 @@
 #define FOC_PARAM_DEFAULT_OBS_SPEED_FLOOR    -6.0
 
 #define FOC_PARAM_DEFAULT_CURR_D_KP   0.03
-#define FOC_PARAM_DEFAULT_CURR_D_KI   0.001
+#define FOC_PARAM_DEFAULT_CURR_D_KI   0.01
 #define FOC_PARAM_DEFAULT_CURR_D_KD   0.0
 #define FOC_PARAM_DEFAULT_CURR_D_I_CEIL     1.0
 #define FOC_PARAM_DEFAULT_CURR_D_I_FLOOR    -1.0
 
 #define FOC_PARAM_DEFAULT_CURR_Q_KP   0.03
-#define FOC_PARAM_DEFAULT_CURR_Q_KI   0.001
+#define FOC_PARAM_DEFAULT_CURR_Q_KI   0.01
 #define FOC_PARAM_DEFAULT_CURR_Q_KD   0.0
 #define FOC_PARAM_DEFAULT_CURR_Q_I_CEIL     1.0
 #define FOC_PARAM_DEFAULT_CURR_Q_I_FLOOR    -1.0
@@ -252,10 +252,11 @@ static piStruct_t mpiSpeed;
 /**
  * @brief      Returns the current in the shunt resister
  * @note       TODO: Remove minus for new revision!!!
+ * @note       TODO: Removed the minus again on old hardware but why???
  */
-#define ADC_CURR_A() ( ((float)mADCValue[ADC_CH_CURR_A]-mDrvOffA) * -mADCtoAmpsFactor )
+#define ADC_CURR_A() ( ((float)mADCValue[ADC_CH_CURR_A]-mDrvOffA) * mADCtoAmpsFactor )
 // TODO: This 2.2 is a measured difference between the 2 currnet sense outputs from the drv
-#define ADC_CURR_B() ( ((float)mADCValue[ADC_CH_CURR_B]-mDrvOffB) * -mADCtoAmpsFactor / 2.2) 
+#define ADC_CURR_B() ( ((float)mADCValue[ADC_CH_CURR_B]-mDrvOffB) * mADCtoAmpsFactor / 2.2) 
 #define ADC_STORE_CURR_A(i) ( ((float)mADCValueStore[i][ADC_CH_CURR_A]-mDrvOffA) * -mADCtoAmpsFactor )
 #define ADC_STORE_CURR_B(i) ( ((float)mADCValueStore[i][ADC_CH_CURR_B]-mDrvOffB) * -mADCtoAmpsFactor )
 /**
@@ -728,8 +729,6 @@ static THD_FUNCTION(mcfocSecondaryThread, arg)
           mContValueStore[i][2], mContValueStore[i][3], mContValueStore[i][4], mContValueStore[i][5], 
           mContValueStore[i][6], mContValueStore[i][7]);
       } 
-    // observer debug
-      // DBG3("%.3f %.3f %.3f %.3f\r\n", mObs.omega_e, mObs.theta, mCtrl.va_set, mCtrl.vb_set);
     #endif
     chThdSleepMilliseconds(1);
   }
@@ -973,11 +972,13 @@ static void svm (float* a, float* b, uint16_t* da, uint16_t* db, uint16_t* dc)
  */
 static void clark (float* va, float* vb, float* vc, float* a, float* b)
 {
+  (void)vc;
   #ifdef USE_CMSIS_CLARK_PARK
     arm_clarke_f32(*va, *vb, a, b);
   #else
-    *a = 2.0f / 3.0f * (*va - 0.5f*(*vb) - 0.5f*(*vc));
-    *b = 2.0f / 3.0f * (SQRT_3_BY_2*(*vb) - SQRT_3_BY_2*(*vc));
+    arm_clarke_f32(*va, *vb, a, b);
+    // *a = 2.0f / 3.0f * (*va - 0.5f*(*vb) - 0.5f*(*vc));
+    // *b = 2.0f / 3.0f * (SQRT_3_BY_2*(*vb) - SQRT_3_BY_2*(*vc));
   #endif
 }
 /**
@@ -1040,8 +1041,9 @@ static void invpark (float* d, float* q, float* theta, float* a, float* b)
     arm_sin_cos_f32(*theta, &sin, &cos);
     arm_inv_park_f32(*d, *q, a, b, sin, cos);
   #else
-    sin = arm_sin_f32(*theta);
-    cos = arm_cos_f32(*theta);
+    // sin = arm_sin_f32(*theta);
+    // cos = arm_cos_f32(*theta);
+    sincos_fast(*theta, &sin, &cos);
     (*a) = (*d)*cos - (*q)*sin;
     (*b) = (*q)*cos + (*d)*sin;
   #endif
@@ -1308,7 +1310,7 @@ CH_IRQ_HANDLER(VectorFC) {
     // run speed controller
     runSpeedController();
     mCtrl.id_set = 0.0; // override
-    mCtrl.iq_set = -10.0;
+    mCtrl.iq_set = 5.0;
     // run current controller
     // Force a step for the current controller
       if((mControllerDebugCtr < (CONT_STORE_DEPTH/3)) || (!mStoreController))
