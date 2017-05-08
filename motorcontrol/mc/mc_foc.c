@@ -88,17 +88,17 @@
 /**
  * Motor default parameters
  */
-#define FOC_MOTOR_DEFAULT_PSI 0.008
+#define FOC_MOTOR_DEFAULT_PSI 15.0e-3 //0.008
 #define FOC_MOTOR_DEFAULT_P   7
-#define FOC_MOTOR_DEFAULT_LS  18.0e-6 // Lumenier: 12e-6
-#define FOC_MOTOR_DEFAULT_RS  1.2 // Lumenier: 0.06
+#define FOC_MOTOR_DEFAULT_LS  35.0e-6 //18.0e-6 // Lumenier: 12e-6
+#define FOC_MOTOR_DEFAULT_RS  20*0.04 // 1.2 // Lumenier: 0.06
 #define FOC_MOTOR_DEFAULT_J   150e-6 // not used
 
 /**
  * FOC defautl parameters
  */
 #define FOC_PARAM_DEFAULT_OBS_GAIN    100e6
-#define FOC_PARAM_DEFAULT_OBS_SPEED_KP  2000.0  
+#define FOC_PARAM_DEFAULT_OBS_SPEED_KP  200.0  
 #define FOC_PARAM_DEFAULT_OBS_SPEED_KI  20000.0
 #define FOC_PARAM_DEFAULT_OBS_SPEED_KD  0.0
 #define FOC_PARAM_DEFAULT_OBS_SPEED_CEIL     6.0
@@ -749,7 +749,7 @@ static void dataInit(void)
   mObs.omega_m = 0.0;
   mObs.omega_e = 0.0;
 
-  mCtrl.w_set = 400.0;
+  mCtrl.w_set = 200.0;
   mCtrl.w_is = 0.0;
   mCtrl.id_set = 0.0;
   mCtrl.id_is = 0.0;
@@ -1023,9 +1023,9 @@ static void invpark (float* d, float* q, float* theta, float* a, float* b)
     arm_sin_cos_f32(*theta, &sin, &cos);
     arm_inv_park_f32(*d, *q, a, b, sin, cos);
   #else
-    // sin = arm_sin_f32(*theta);
-    // cos = arm_cos_f32(*theta);
-    sincos_fast(*theta, &sin, &cos);
+    sin = arm_sin_f32(*theta);
+    cos = arm_cos_f32(*theta);
+    // sincos_fast(*theta, &sin, &cos);
     (*a) = (*d)*cos - (*q)*sin;
     (*b) = (*q)*cos + (*d)*sin;
   #endif
@@ -1090,6 +1090,7 @@ static void runSpeedObserver (float *dt)
   UTIL_LP_FAST(mObs.omega_m, wm, 0.0005);
 
 #ifdef DEBUG_OBSERVER
+  static uint16_t downSampleCtr = 0;
   if(mStoreObserver)
   {
     if(++downSampleCtr == DEBUG_DOWNSAMPLE_FACTOR)
@@ -1216,7 +1217,7 @@ static void forcedCommutation (void)
   static const float freq = FOC_FORCED_COMM_FREQ;
   static float theta;
 
-  theta = 2*PI*freq*(t); //800ns
+  theta = 2*PI*FOC_FORCED_COMM_FREQ*(t); //800ns
   mCtrl.vd_set = FOC_FORCED_COMM_VD;
   mCtrl.vq_set = FOC_FORCED_COMM_VQ;
   t += ((float)FOC_CURRENT_CONTROLLER_SLOWDOWN / FOC_F_SW);
@@ -1259,8 +1260,8 @@ CH_IRQ_HANDLER(VectorFC) {
   static float dt = 0;
   static float id, iq;
 
-
   CH_IRQ_PROLOGUE();
+  chSysLockFromISR();
   palSetPad(GPIOE,14);
 
   ADC_ClearITPendingBit(ADC3, ADC_IT_EOS);
@@ -1281,17 +1282,15 @@ CH_IRQ_HANDLER(VectorFC) {
   {
     istCtr = 0;
     // palSetPad(GPIOE,14);
-    chSysLockFromISR();
-    chBSemSignalI(&mIstSem);
-    chSysUnlockFromISR(); 
+    // chSysLockFromISR();
+    // chBSemSignalI(&mIstSem);
+    // chSysUnlockFromISR(); 
 
     park(&mCtrl.ia_is, &mCtrl.ib_is, &mObs.theta, &id, &iq);
-    // Filter
     UTIL_LP_FAST(mCtrl.id_is, id, FOC_LP_FAST_CONSTANT);
     UTIL_LP_FAST(mCtrl.iq_is, iq, FOC_LP_FAST_CONSTANT);
-    // run speed controller
     runSpeedController();
-    // run current controller
+
     // Force a step for the current controller
       // if((mControllerDebugCtr < (CONT_STORE_DEPTH/3)) || (!mStoreController))
       // // if((mObsDebugCounter < (OBS_STORE_DEPTH/3)) || (!mStoreObserver))
@@ -1318,8 +1317,7 @@ CH_IRQ_HANDLER(VectorFC) {
     if(mForcedCommutationMode)
       forcedCommutation();
     else
-      runOutputs();
-    
+      runOutputs(); 
   }
 
 #ifdef DEBUG_ADC
@@ -1337,6 +1335,7 @@ CH_IRQ_HANDLER(VectorFC) {
 #endif
 
   palClearPad(GPIOE,14);
+  chSysUnlockFromISR(); 
   CH_IRQ_EPILOGUE();
 }
 
