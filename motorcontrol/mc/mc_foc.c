@@ -212,6 +212,8 @@ static piStruct_t mpiId;
 static piStruct_t mpiIq;
 static piStruct_t mpiSpeed;
 
+static mcState_t mState = MC_HALT;
+
 /*===========================================================================*/
 /* macros                                                                    */
 /*===========================================================================*/
@@ -639,34 +641,14 @@ static THD_FUNCTION(mcfocMainThread, arg) {
    *
    * @param[in]  <unnamed>  { parameter_description }
    */
-  static float t = 0;
-  static float freq = 70.0;
-  static float theta;
-  static uint16_t da, db, dc;
   mCtrl.vd_set = 0;
   mCtrl.vq_set = 0.05;
   // TIMER_UPDATE_DUTY(1500, 0, 0);
-  while (true) {
-    // override values
-// palSetPad(GPIOE,14);
-    // chBSemWait(&mIstSem);
-// palSetPad(GPIOE,14);
-//     theta = 2*PI*freq*(t); //800ns
-//     mCtrl.vd_set = 0;
-//     mCtrl.vq_set = 0.07;
-//     t += ((float)FOC_CURRENT_CONTROLLER_SLOWDOWN / FOC_F_SW);
-//     runOutputsWithoutObserver(theta);
-// palClearPad(GPIOE,14);
+    mState = MC_OPEN_LOOP;
     chThdSleepMilliseconds(3000);
-// mForcedCommutationMode = 0;
-
-    // theta = 2*PI*freq*(t/1000000); //800ns
-    // invpark(&mCtrl.vd_set, &mCtrl.vq_set, &theta, &mCtrl.va_set, &mCtrl.vb_set); // 5.5us
-    // utils_saturate_vector_2d(&mCtrl.va_set, &mCtrl.vb_set, SQRT_3_BY_2);
-    // svm(&mCtrl.va_set, &mCtrl.vb_set, &da, &db, &dc); // 4.3us
-    // TIMER_UPDATE_DUTY(dc, db, da);
-    // freq += 0.005;
-
+    mState = MC_CLOSED_LOOP;
+  while (true) {
+    chThdSleepMilliseconds(3000);
   }
 }
 static THD_FUNCTION(mcfocSecondaryThread, arg)
@@ -767,7 +749,7 @@ static void dataInit(void)
   mObs.omega_m = 0.0;
   mObs.omega_e = 0.0;
 
-  mCtrl.w_set = 120.0;
+  mCtrl.w_set = 400.0;
   mCtrl.w_is = 0.0;
   mCtrl.id_set = 0.0;
   mCtrl.id_is = 0.0;
@@ -1104,7 +1086,7 @@ static void runSpeedObserver (float *dt)
   mObs.omega_e = piController(&mpiSpeed, err, dt);
   mObs.theta_var += mObs.omega_e * (*dt);
   utils_norm_angle_rad(&mObs.theta_var);
-  wm = mObs.omega_e * (60.0 / 2.0 / PI / mMotParms.p);
+  wm = -mObs.omega_e * (60.0 / 2.0 / PI / mMotParms.p);
   UTIL_LP_FAST(mObs.omega_m, wm, 0.0005);
 
 #ifdef DEBUG_OBSERVER
@@ -1309,19 +1291,27 @@ CH_IRQ_HANDLER(VectorFC) {
     UTIL_LP_FAST(mCtrl.iq_is, iq, FOC_LP_FAST_CONSTANT);
     // run speed controller
     runSpeedController();
-    mCtrl.id_set = 0.0; // override
-    mCtrl.iq_set = 5.0;
     // run current controller
     // Force a step for the current controller
-      if((mControllerDebugCtr < (CONT_STORE_DEPTH/3)) || (!mStoreController))
-      // if((mObsDebugCounter < (OBS_STORE_DEPTH/3)) || (!mStoreObserver))
-      {
-        // mForcedCommutationMode = 1;
-      }
-      else
-      {
-        mForcedCommutationMode = 0;
-      }
+      // if((mControllerDebugCtr < (CONT_STORE_DEPTH/3)) || (!mStoreController))
+      // // if((mObsDebugCounter < (OBS_STORE_DEPTH/3)) || (!mStoreObserver))
+      // {
+      //   mState = MC_OPEN_LOOP;
+      // }
+      // else
+      // {
+      //   mState = MC_CLOSED_LOOP;
+      // }
+    if(mState != MC_CLOSED_LOOP)
+    {
+      mCtrl.id_set = 0.0; // override
+      mCtrl.iq_set = 5.0;
+      mForcedCommutationMode = 1;
+    }
+    else
+    {
+      mForcedCommutationMode = 0;
+    }
     runCurrentController(&dt);
     // mCtrl.vd_set = FOC_FORCED_COMM_VD; // override
     // mCtrl.vq_set = FOC_FORCED_COMM_VQ;

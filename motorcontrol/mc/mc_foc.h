@@ -88,6 +88,12 @@ typedef struct
   arm_pid_instance_f32 iqPID;
 } mcfController_t;
 
+typedef enum {
+  MC_HALT,
+  MC_OPEN_LOOP,
+  MC_CLOSED_LOOP
+} mcState_t;
+
 /*===========================================================================*/
 /* MC_FOC public functions.                                                  */
 /*===========================================================================*/
