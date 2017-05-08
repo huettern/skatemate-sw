@@ -206,6 +206,7 @@ static uint16_t mObsDebugCounter;
 static volatile float mContValueStore[CONT_STORE_DEPTH][8];
 static volatile uint8_t mStoreController;
 static uint16_t mControllerDebugCtr;
+static uint8_t mStartStore = 0;
 
 static uint8_t mForcedCommutationMode = 1;
 
@@ -639,7 +640,13 @@ void mcfDumpData(void)
   // ADC_StartConversion(ADC1);
   // ADC_StartConversion(ADC3);
 }
-
+/**
+ * @brief      Starts the sampling routine
+ */
+void mcfStartSample(void)
+{
+  mStartStore = 1;
+}
 /*===========================================================================*/
 /* Module static functions.                                                  */
 /*===========================================================================*/
@@ -681,7 +688,8 @@ static THD_FUNCTION(mcfocSecondaryThread, arg)
   while(true)
   {
     #ifdef DEBUG_ADC
-      chThdSleepMilliseconds(5000);
+      while(!mStartStore) chThdSleepMilliseconds(10);
+      mStartStore = 0;
       mStoreADC1 = 1;
       mStoreADC3 = 1;
       chThdSleepMilliseconds(1);
@@ -707,7 +715,8 @@ static THD_FUNCTION(mcfocSecondaryThread, arg)
         TIM1->CCR2, TIM1->CCR2, TIM1->CCR1);
     #endif
     #ifdef DEBUG_OBSERVER
-      chThdSleepMilliseconds(5000);
+      while(!mStartStore) chThdSleepMilliseconds(10);
+      mStartStore = 0;
       mStoreObserver = 1;
       chThdSleepMilliseconds(1);
       while(mStoreObserver) chThdSleepMilliseconds(1);
@@ -720,7 +729,8 @@ static THD_FUNCTION(mcfocSecondaryThread, arg)
       // DBG3("%.3f %.3f %.3f %.3f\r\n", mObs.omega_e, mObs.theta, mCtrl.va_set, mCtrl.vb_set);
     #endif
     #ifdef DEBUG_CONTROLLERS
-      chThdSleepMilliseconds(3000);
+      while(!mStartStore) chThdSleepMilliseconds(10);
+      mStartStore = 0;
       mStoreController = 1;
       chThdSleepMilliseconds(1);
       while(mStoreController) chThdSleepMilliseconds(1);

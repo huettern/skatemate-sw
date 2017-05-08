@@ -96,7 +96,7 @@ typedef enum {
 void mcfInit(void);
 void mcfSetDuty (uint16_t a, uint16_t b, uint16_t c);
 void mcfDumpData(void);
-
+void mcfStartSample(void);
 
 #endif
 /** @} */
