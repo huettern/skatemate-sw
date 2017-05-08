@@ -55,6 +55,8 @@
 static thread_t *shelltp = NULL;
 static THD_WORKING_AREA(shellWA, DEFS_THD_SHELL_WA_SIZE);
 
+static const usbcdcParameterStruct_t** mShellVars;
+
 /*===========================================================================*/
 /* Module static functions.                                                  */
 /*===========================================================================*/
@@ -150,6 +152,33 @@ static void cmd_duty(BaseSequentialStream *chp, int argc, char *argv[])
   if(argc<3) return;
   mcfSetDuty(atoi(argv[0]),atoi(argv[1]),atoi(argv[2]));
 }
+static void cmd_get(BaseSequentialStream *chp, int argc, char *argv[])
+{
+  (void)argc;
+  (void)argv;
+  uint8_t ctr;
+  for(ctr = 0; mShellVars[ctr] != NULL; ctr++)
+  {
+    chprintf(chp, "%s = %.3f\r\n", mShellVars[ctr]->name, *mShellVars[ctr]->loc);
+  }
+}
+static void cmd_set(BaseSequentialStream *chp, int argc, char *argv[])
+{
+  (void)chp;
+  (void)argc;
+  (void)argv;
+  uint8_t ctr;
+  for(ctr = 0; mShellVars[ctr] != NULL; ctr++)
+  {
+    if(strcmp(mShellVars[ctr]->name, argv[0]) == 0)
+    {
+      (*mShellVars[ctr]->loc) = stof(argv[1]);
+      chprintf(chp, "%s = %.3f\r\n", mShellVars[ctr]->name, *mShellVars[ctr]->loc);
+      return;
+    }
+  }
+  chprintf(chp, "%s not found\r\n", argv[0]);
+}
 /**
  * List of shell commands
  */
@@ -158,6 +187,8 @@ static const ShellCommand commands[] = {
     {"threads", cmd_threads},
     {"drv", cmd_drv},
     {"duty", cmd_duty},
+    {"get", cmd_get},
+    {"set", cmd_set},
 		{NULL, NULL}
 };
 
@@ -165,7 +196,7 @@ static const ShellCommand commands[] = {
  * shell configuration
  */
 static const ShellConfig shell_cfg1 = {
-		(BaseSequentialStream *)&SDU1,
+		(BaseSequentialStream *)&DEFS_SHELL_STREAM,
 		commands
 };
 
@@ -176,7 +207,8 @@ static const ShellConfig shell_cfg1 = {
  * @brief      Handle the shell, must be called periodically
  */
 void usbcdcHandleShell(void) {
-	if (!shelltp && (SDU1.config->usbp->state == USB_ACTIVE))
+  // if (!shelltp && (DEFS_SHELL_STREAM.config->usbp->state == USB_ACTIVE))
+  if (!shelltp)
       // shelltp = shellCreate(&shell_cfg1, SHELL_WA_SIZE, NORMALPRIO);
       shelltp = shellCreateStatic(&shell_cfg1, shellWA, sizeof(shellWA), NORMALPRIO);
     else if (chThdTerminatedX(shelltp)) {
@@ -204,7 +236,13 @@ void usbcdcInit(void) {
   // chThdSleepMilliseconds(1500);
   usbStart(serusbcfg.usbp, &usbcfg);
   usbConnectBus(serusbcfg.usbp);
-  
 }
+
+void usbcdcSetShellVars(const usbcdcParameterStruct_t** vars)
+{
+  mShellVars = vars;
+}
+
+
 
 /** @} */

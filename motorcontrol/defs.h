@@ -37,6 +37,8 @@
 #define AHB_CLOCK	72000000 //Hz
 #define PLL_CLOCK	72000000 //Hz
 
+#define DEFS_SHELL_STREAM SD3
+
 // DBG for usb debugging messages
 #define DBG(X, ...) chprintf(bssusb, X, ##__VA_ARGS__ )
 
@@ -45,8 +47,8 @@
 #define DBG2(X, ...)
 
 // DBG3 for fast UART debugging
-#define DBG3(X, ...) chprintf((BaseSequentialStream *)&SD3, X, ##__VA_ARGS__ )
-// #define DBG3(X, ...)
+// #define DBG3(X, ...) chprintf((BaseSequentialStream *)&SD3, X, ##__VA_ARGS__ )
+#define DBG3(X, ...)
 
 
 /*===========================================================================*/

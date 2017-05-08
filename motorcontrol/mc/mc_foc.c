@@ -34,6 +34,7 @@
 
 #include "defs.h"
 #include "util.h"
+#include "usbcdc.h"
 
 #include "arm_math.h"
 
@@ -208,11 +209,42 @@ static uint16_t mControllerDebugCtr;
 
 static uint8_t mForcedCommutationMode = 1;
 
+static piStruct_t mpiSpeed;
 static piStruct_t mpiId;
 static piStruct_t mpiIq;
+static piStruct_t mpiSpeedObs;
 static piStruct_t mpiSpeed;
 
 static mcState_t mState = MC_HALT;
+
+/*===========================================================================*/
+/* SHELL settings                                                            */
+/*===========================================================================*/
+static const usbcdcParameterStruct_t mShellSpeedObsKp = {"speed_obs_kp", &mpiSpeedObs.kp};
+static const usbcdcParameterStruct_t mShellSpeedObsKi = {"speed_obs_ki", &mpiSpeedObs.ki};
+static const usbcdcParameterStruct_t mShellcurr_dKp = {"curr_d_kp", &mpiId.kp};
+static const usbcdcParameterStruct_t mShellcurr_dKi = {"curr_d_ki", &mpiId.ki};
+static const usbcdcParameterStruct_t mShellcurr_qKp = {"curr_q_kp", &mpiIq.kp};
+static const usbcdcParameterStruct_t mShellcurr_qKi = {"curr_q_ki", &mpiIq.ki};
+static const usbcdcParameterStruct_t mShellSpeedKp = {"speed_kp", &mpiSpeed.kp};
+static const usbcdcParameterStruct_t mShellSpeedKi = {"speed_ki", &mpiSpeed.ki};
+static const usbcdcParameterStruct_t mShellObsGain = {"obs_gain", &mFOCParms.obsGain};
+static const usbcdcParameterStruct_t mShellwSet = {"w_set", &mCtrl.w_set};
+
+static const usbcdcParameterStruct_t* mShellVars[] = 
+{
+  &mShellSpeedObsKp,
+  &mShellSpeedObsKi,
+  &mShellcurr_dKp,
+  &mShellcurr_dKi,
+  &mShellcurr_qKp,
+  &mShellcurr_qKi,
+  &mShellObsGain,
+  &mShellwSet,
+  &mShellSpeedKp,
+  &mShellSpeedKi,
+  NULL
+};
 
 /*===========================================================================*/
 /* macros                                                                    */
@@ -283,7 +315,7 @@ static float piController(piStruct_t* s, float sample, float* dt);
 
 static void runPositionObserver(float *dt);
 static void runSpeedObserver (float *dt);
-static void runSpeedController (void);
+static void runSpeedController (float *dt);
 static void runCurrentController (float *dt);
 static void runOutputs(void);
 static void runOutputsWithoutObserver(float theta);
@@ -304,6 +336,7 @@ void mcfInit(void)
   ADC_InitTypeDef adc_is;
   DMA_InitTypeDef dma_is;
   dataInit();
+  usbcdcSetShellVars(mShellVars);
 
   // TIM1 clock enable
   RCC_APB2PeriphClockCmd(RCC_APB2Periph_TIM1, ENABLE);
@@ -788,8 +821,14 @@ static void dataInit(void)
   mpiIq.iceil = FOC_PARAM_DEFAULT_CURR_Q_I_CEIL;
   mpiIq.ifloor = FOC_PARAM_DEFAULT_CURR_Q_I_FLOOR;
 
-  mpiSpeed.kp = mFOCParms.obsSpeed_kp;
-  mpiSpeed.ki = mFOCParms.obsSpeed_ki;
+  mpiSpeedObs.kp = mFOCParms.obsSpeed_kp;
+  mpiSpeedObs.ki = mFOCParms.obsSpeed_ki;
+  mpiSpeedObs.istate = 0;
+  mpiSpeedObs.iceil = FOC_PARAM_DEFAULT_OBS_SPEED_CEIL;
+  mpiSpeedObs.ifloor = FOC_PARAM_DEFAULT_OBS_SPEED_FLOOR;
+
+  mpiSpeed.kp = mFOCParms.speed_kp;
+  mpiSpeed.ki = mFOCParms.speed_ki;
   mpiSpeed.istate = 0;
   mpiSpeed.iceil = FOC_PARAM_DEFAULT_OBS_SPEED_CEIL;
   mpiSpeed.ifloor = FOC_PARAM_DEFAULT_OBS_SPEED_FLOOR;
@@ -1083,7 +1122,7 @@ static void runSpeedObserver (float *dt)
   err = mObs.theta - mObs.theta_var;
   utils_norm_angle_rad(&err);
   // mObs.omega_e = arm_pid_f32(&mObs.speedPID, err);
-  mObs.omega_e = piController(&mpiSpeed, err, dt);
+  mObs.omega_e = piController(&mpiSpeedObs, err, dt);
   mObs.theta_var += mObs.omega_e * (*dt);
   utils_norm_angle_rad(&mObs.theta_var);
   wm = -mObs.omega_e * (60.0 / 2.0 / PI / mMotParms.p);
@@ -1113,13 +1152,14 @@ static void runSpeedObserver (float *dt)
 /**
  * @brief      Runs the speed controller, calculates id_set and iq_set
  */
-static void runSpeedController (void)
+static void runSpeedController (float *dt)
 {
   static float err;
 
   err = mCtrl.w_set - mObs.omega_m;
   mCtrl.id_set = 0.0;
-  mCtrl.iq_set = arm_pid_f32(&mCtrl.speedPID, err);
+  // mCtrl.iq_set = arm_pid_f32(&mCtrl.speedPID, err);
+  mCtrl.iq_set = piController(&mpiSpeed, err, dt);
 }
 /**
  * @brief      Runs the current controller. Calculates vd and vq
@@ -1289,7 +1329,7 @@ CH_IRQ_HANDLER(VectorFC) {
     park(&mCtrl.ia_is, &mCtrl.ib_is, &mObs.theta, &id, &iq);
     UTIL_LP_FAST(mCtrl.id_is, id, FOC_LP_FAST_CONSTANT);
     UTIL_LP_FAST(mCtrl.iq_is, iq, FOC_LP_FAST_CONSTANT);
-    runSpeedController();
+    runSpeedController(&dt);
 
     // Force a step for the current controller
       // if((mControllerDebugCtr < (CONT_STORE_DEPTH/3)) || (!mStoreController))

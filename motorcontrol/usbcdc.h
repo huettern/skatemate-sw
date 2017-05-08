@@ -13,9 +13,15 @@
  * @addtogroup USBCDC
  * @{
  */
-
+typedef struct
+{
+	const char* name;
+	float* loc;
+} usbcdcParameterStruct_t;
 
 void usbcdcInit(void);
 void usbcdcHandleShell(void);
+void usbcdcSetShellVars(const usbcdcParameterStruct_t** vars);
+
 
 /** @} */
