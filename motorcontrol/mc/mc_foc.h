@@ -41,13 +41,12 @@ typedef struct
   float obsSpeed_kd;
   float curr_d_kp;
   float curr_d_ki;
-  float curr_d_kd;
   float curr_q_kp;
   float curr_q_ki;
-  float curr_q_kd;
   float speed_kp;
   float speed_ki;
-  float speed_kd;
+  float iTermCeil;
+  float iTermFloor;
 } mcfFOCParameter_t;
 
 typedef struct
@@ -83,9 +82,6 @@ typedef struct
   float ipa_is;
   float ipb_is;
   float ipc_is;
-  arm_pid_instance_f32 speedPID;
-  arm_pid_instance_f32 idPID;
-  arm_pid_instance_f32 iqPID;
 } mcfController_t;
 
 typedef enum {

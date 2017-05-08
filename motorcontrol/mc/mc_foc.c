@@ -99,23 +99,18 @@
  * FOC defautl parameters
  */
 #define FOC_PARAM_DEFAULT_OBS_GAIN    100e6
-#define FOC_PARAM_DEFAULT_OBS_SPEED_KP  200.0  
+#define FOC_PARAM_DEFAULT_OBS_SPEED_KP  2000.0  
 #define FOC_PARAM_DEFAULT_OBS_SPEED_KI  20000.0
 #define FOC_PARAM_DEFAULT_OBS_SPEED_KD  0.0
-#define FOC_PARAM_DEFAULT_OBS_SPEED_CEIL     6.0
-#define FOC_PARAM_DEFAULT_OBS_SPEED_FLOOR    -6.0
 
 #define FOC_PARAM_DEFAULT_CURR_D_KP   0.03
-#define FOC_PARAM_DEFAULT_CURR_D_KI   0.01
-#define FOC_PARAM_DEFAULT_CURR_D_KD   0.0
-#define FOC_PARAM_DEFAULT_CURR_D_I_CEIL     1.0
-#define FOC_PARAM_DEFAULT_CURR_D_I_FLOOR    -1.0
+#define FOC_PARAM_DEFAULT_CURR_D_KI   0.0
 
 #define FOC_PARAM_DEFAULT_CURR_Q_KP   0.03
-#define FOC_PARAM_DEFAULT_CURR_Q_KI   0.01
-#define FOC_PARAM_DEFAULT_CURR_Q_KD   0.0
-#define FOC_PARAM_DEFAULT_CURR_Q_I_CEIL     1.0
-#define FOC_PARAM_DEFAULT_CURR_Q_I_FLOOR    -1.0
+#define FOC_PARAM_DEFAULT_CURR_Q_KI   0.0
+
+#define FOC_PARAM_DEFAULT_ITERM_CEIL     9.0
+#define FOC_PARAM_DEFAULT_ITERM_FLOOR    -9.0
 
 #define FOC_PARAM_DEFAULT_SPEED_KP    0.1
 #define FOC_PARAM_DEFAULT_SPEED_KI    0.0
@@ -643,54 +638,40 @@ void mcfDumpData(void)
 /*===========================================================================*/
 /* Module static functions.                                                  */
 /*===========================================================================*/
+/**
+ * @brief      FOC statemachine
+ *
+ * @param[in]  <unnamed>  thread pointer
+ * @param[in]  <unnamed>  arguments
+ */
 static THD_FUNCTION(mcfocMainThread, arg) {
   (void)arg;
   chRegSetThreadName(DEFS_THD_MCFOC_MAIN_NAME);
-  // uint16_t dutya, dutyb, dutyc;
 
-  // while(true)
-  // {
-  //   // transform
-  //   park(&mCtrl.ia_is, &mCtrl.ib_is, &mObs.theta, &mCtrl.id_is, &mCtrl.iq_is);
-  //   // run speed controller
-  //   // runSpeedController();
-  //   mCtrl.id_set = 0.0;
-  //   mCtrl.iq_set = 0.01;
-  //   // run current controller
-  //   runCurrentController();
-  //   // inverse transform
-  //   invpark(&mCtrl.vd_set, &mCtrl.vq_set, &mObs.theta, &mCtrl.va_set, &mCtrl.vb_set);
-  //   // calculate duties
-  //   utils_saturate_vector_2d(&mCtrl.va_set, &mCtrl.vb_set, SQRT_3_BY_2);
-  //   svm(&mCtrl.va_set, &mCtrl.vb_set, &dutya, &dutyb, &dutyc);
-  //   // set output
-  //   TIMER_UPDATE_DUTY(dutyc, dutyb, dutya);
-  //   // delay
-  //   chThdSleepMicroseconds(FOC_THREAD_INTERVAL);
-  // }
-
-  /**
-   * @brief      SVM test
-   *
-   * @param[in]  <unnamed>  { parameter_description }
-   */
-  mCtrl.vd_set = 0;
-  mCtrl.vq_set = 0.05;
-  // TIMER_UPDATE_DUTY(1500, 0, 0);
-    mState = MC_OPEN_LOOP;
+  mCtrl.w_set = 200;
+  mState = MC_OPEN_LOOP;
+  chThdSleepMilliseconds(3000);
+  mState = MC_CLOSED_LOOP;
+  while (true) 
+  {
     chThdSleepMilliseconds(3000);
-    mState = MC_CLOSED_LOOP;
-  while (true) {
+    mCtrl.w_set = 150;
     chThdSleepMilliseconds(3000);
+    mCtrl.w_set = 250;
   }
 }
+
+/**
+ * @brief      Secondary FOC thread, used for debugging only
+ *
+ * @param[in]  <unnamed>  thread pointer
+ * @param[in]  <unnamed>  arguments
+ */
 static THD_FUNCTION(mcfocSecondaryThread, arg)
 {
   (void)arg;
   chRegSetThreadName(DEFS_THD_MCFOC_SECOND_NAME);
-  static float ph_a, ph_b, ph_c, suppl, curr_a, curr_b, ref;
   uint16_t i;
-  // utlmEnable(true);
   
   while(true)
   {
@@ -766,13 +747,11 @@ static void dataInit(void)
   mFOCParms.obsSpeed_kd = FOC_PARAM_DEFAULT_OBS_SPEED_KD;
   mFOCParms.curr_d_kp = FOC_PARAM_DEFAULT_CURR_D_KP;
   mFOCParms.curr_d_ki = FOC_PARAM_DEFAULT_CURR_D_KI;
-  mFOCParms.curr_d_kd = FOC_PARAM_DEFAULT_CURR_D_KD;
   mFOCParms.curr_q_kp = FOC_PARAM_DEFAULT_CURR_Q_KP;
   mFOCParms.curr_q_ki = FOC_PARAM_DEFAULT_CURR_Q_KI;
-  mFOCParms.curr_q_kd = FOC_PARAM_DEFAULT_CURR_Q_KD;
   mFOCParms.speed_kp = FOC_PARAM_DEFAULT_SPEED_KP;
-  mFOCParms.speed_ki = FOC_PARAM_DEFAULT_SPEED_KI;
-  mFOCParms.speed_kd = FOC_PARAM_DEFAULT_SPEED_KD;
+  mFOCParms.iTermCeil = FOC_PARAM_DEFAULT_ITERM_CEIL;
+  mFOCParms.iTermFloor = FOC_PARAM_DEFAULT_ITERM_FLOOR;
 
   mObs.x[0] = 0.0; mObs.x[1] = 0.0;
   mObs.eta[0] = 0.0; mObs.eta[1] = 0.0;
@@ -782,7 +761,7 @@ static void dataInit(void)
   mObs.omega_m = 0.0;
   mObs.omega_e = 0.0;
 
-  mCtrl.w_set = 200.0;
+  mCtrl.w_set = 0.0;
   mCtrl.w_is = 0.0;
   mCtrl.id_set = 0.0;
   mCtrl.id_is = 0.0;
@@ -791,47 +770,30 @@ static void dataInit(void)
   mCtrl.vd_set = 0.0;
   mCtrl.vq_set = 0.0;
 
-  // PID controllers
-  mObs.speedPID.Kp = mFOCParms.obsSpeed_kp;
-  mObs.speedPID.Ki = mFOCParms.obsSpeed_ki;
-  mObs.speedPID.Kd = mFOCParms.obsSpeed_kd;
-  arm_pid_init_f32(&mObs.speedPID, true);
-  mCtrl.speedPID.Kp = mFOCParms.speed_kp;
-  mCtrl.speedPID.Ki = mFOCParms.speed_ki;
-  mCtrl.speedPID.Kd = mFOCParms.speed_kd;
-  arm_pid_init_f32(&mCtrl.speedPID, true);
-  mCtrl.idPID.Kp = mFOCParms.curr_d_kp;
-  mCtrl.idPID.Ki = mFOCParms.curr_d_ki;
-  mCtrl.idPID.Kd = mFOCParms.curr_d_kd;
-  arm_pid_init_f32(&mCtrl.idPID, true);
-  mCtrl.iqPID.Kp = mFOCParms.curr_q_kp;
-  mCtrl.iqPID.Ki = mFOCParms.curr_q_ki;
-  mCtrl.iqPID.Kd = mFOCParms.curr_q_kd;
-  arm_pid_init_f32(&mCtrl.iqPID, true);
-
-  mpiId.kp = FOC_PARAM_DEFAULT_CURR_D_KP;
-  mpiId.ki = FOC_PARAM_DEFAULT_CURR_D_KI;
+  // PID Controllers
+  mpiId.kp = mFOCParms.curr_d_kp;
+  mpiId.ki = mFOCParms.curr_d_ki;
   mpiId.istate = 0;
-  mpiId.iceil = FOC_PARAM_DEFAULT_CURR_D_I_CEIL;
-  mpiId.ifloor = FOC_PARAM_DEFAULT_CURR_D_I_FLOOR;
+  mpiId.iceil = mFOCParms.iTermCeil;
+  mpiId.ifloor = mFOCParms.iTermFloor;
 
-  mpiIq.kp = FOC_PARAM_DEFAULT_CURR_Q_KP;
-  mpiIq.ki = FOC_PARAM_DEFAULT_CURR_Q_KI;
+  mpiIq.kp = mFOCParms.curr_q_kp;
+  mpiIq.ki = mFOCParms.curr_q_ki;
   mpiIq.istate = 0;
-  mpiIq.iceil = FOC_PARAM_DEFAULT_CURR_Q_I_CEIL;
-  mpiIq.ifloor = FOC_PARAM_DEFAULT_CURR_Q_I_FLOOR;
+  mpiIq.iceil = mFOCParms.iTermCeil;
+  mpiIq.ifloor = mFOCParms.iTermFloor;
 
   mpiSpeedObs.kp = mFOCParms.obsSpeed_kp;
   mpiSpeedObs.ki = mFOCParms.obsSpeed_ki;
   mpiSpeedObs.istate = 0;
-  mpiSpeedObs.iceil = FOC_PARAM_DEFAULT_OBS_SPEED_CEIL;
-  mpiSpeedObs.ifloor = FOC_PARAM_DEFAULT_OBS_SPEED_FLOOR;
+  mpiSpeedObs.iceil = mFOCParms.iTermCeil;
+  mpiSpeedObs.ifloor = mFOCParms.iTermFloor;
 
   mpiSpeed.kp = mFOCParms.speed_kp;
   mpiSpeed.ki = mFOCParms.speed_ki;
   mpiSpeed.istate = 0;
-  mpiSpeed.iceil = FOC_PARAM_DEFAULT_OBS_SPEED_CEIL;
-  mpiSpeed.ifloor = FOC_PARAM_DEFAULT_OBS_SPEED_FLOOR;
+  mpiSpeed.iceil = mFOCParms.iTermCeil;
+  mpiSpeed.ifloor = mFOCParms.iTermFloor;
 }
 /**
  * @brief      Calibrates all analog signals
