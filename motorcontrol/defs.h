@@ -47,8 +47,8 @@
 #define DBG2(X, ...)
 
 // DBG3 for fast UART debugging
-// #define DBG3(X, ...) chprintf((BaseSequentialStream *)&SD3, X, ##__VA_ARGS__ )
-#define DBG3(X, ...)
+#define DBG3(X, ...) chprintf((BaseSequentialStream *)&SD3, X, ##__VA_ARGS__ )
+// #define DBG3(X, ...)
 
 
 /*===========================================================================*/

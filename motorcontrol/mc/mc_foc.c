@@ -80,6 +80,10 @@
  */
 #define FOC_CURRENT_CONTROLLER_SLOWDOWN 10
 /**
+ * How much slower the speed control loop should run
+ */
+#define FOC_SPEED_CONTROLLER_SLOWDOWN 100
+/**
  * Forced commutation settings
  */
 #define FOC_FORCED_COMM_FREQ -30.0
@@ -109,14 +113,15 @@
 #define FOC_PARAM_DEFAULT_CURR_Q_KP   0.03
 #define FOC_PARAM_DEFAULT_CURR_Q_KI   0.0
 
-#define FOC_PARAM_DEFAULT_ITERM_CEIL     9.0
-#define FOC_PARAM_DEFAULT_ITERM_FLOOR    -9.0
+#define FOC_PARAM_DEFAULT_ITERM_CEIL     10.0
+#define FOC_PARAM_DEFAULT_ITERM_FLOOR    -10.0
 
-#define FOC_PARAM_DEFAULT_SPEED_KP    0.1
-#define FOC_PARAM_DEFAULT_SPEED_KI    0.0
-#define FOC_PARAM_DEFAULT_SPEED_KD    0.0
+#define FOC_PARAM_DEFAULT_SPEED_KP    0.2
+#define FOC_PARAM_DEFAULT_SPEED_KI    1.0
 
 #define FOC_LP_FAST_CONSTANT 0.1
+
+#define FOC_PARAPM_DEFAULT_O_CURRENT_MAX 1.0
 /**
  * @brief      Resistor divider for voltage measurements
  */
@@ -650,14 +655,14 @@ static THD_FUNCTION(mcfocMainThread, arg) {
 
   mCtrl.w_set = 200;
   mState = MC_OPEN_LOOP;
-  chThdSleepMilliseconds(3000);
+  chThdSleepMilliseconds(1500);
   mState = MC_CLOSED_LOOP;
   while (true) 
   {
     chThdSleepMilliseconds(3000);
-    mCtrl.w_set = 150;
+    // mCtrl.w_set = 150;
     chThdSleepMilliseconds(3000);
-    mCtrl.w_set = 250;
+    // mCtrl.w_set = 250;
   }
 }
 
@@ -1121,7 +1126,7 @@ static void runSpeedController (float *dt)
   err = mCtrl.w_set - mObs.omega_m;
   mCtrl.id_set = 0.0;
   // mCtrl.iq_set = arm_pid_f32(&mCtrl.speedPID, err);
-  mCtrl.iq_set = piController(&mpiSpeed, err, dt);
+  mCtrl.iq_set = FOC_PARAPM_DEFAULT_O_CURRENT_MAX * piController(&mpiSpeed, err, dt);
 }
 /**
  * @brief      Runs the current controller. Calculates vd and vq
@@ -1138,10 +1143,9 @@ static void runCurrentController (float* dt)
   mCtrl.vd_set = piController(&mpiId, d_err, dt);
   mCtrl.vq_set = piController(&mpiIq, q_err, dt);
 
-  // mCtrl.vd_set -= mObs.omega_e * mMotParms.Ls;
-  // mCtrl.vq_set += mObs.omega_e * mMotParms.Ls;
+  mCtrl.vd_set -= mObs.omega_e * mMotParms.Ls;
+  mCtrl.vq_set += mObs.omega_e * mMotParms.Ls;
   // mCtrl.vq_set += mObs.omega_e * mMotParms.psi;
-  // 
 
 #ifdef DEBUG_CONTROLLERS
   static uint16_t downSampleCtr = 0;
@@ -1258,9 +1262,11 @@ CH_IRQ_HANDLER(Vector88) {
  * @brief      ADC3 IRQ handler
  */
 CH_IRQ_HANDLER(VectorFC) {
-  static uint16_t istCtr = 0;
+  static uint16_t currSlowDownCtr = 0;
+  static uint16_t speedSlowDownCtr = 0;
   static float dt = 0;
   static float id, iq;
+  static float dtspeed, dtcurrent;
 
   CH_IRQ_PROLOGUE();
   chSysLockFromISR();
@@ -1279,10 +1285,27 @@ CH_IRQ_HANDLER(VectorFC) {
   runPositionObserver(&dt); // 8.765us
   runSpeedObserver(&dt); // 2.895us
 
-
-  if(++istCtr == FOC_CURRENT_CONTROLLER_SLOWDOWN)
+  if(++speedSlowDownCtr == FOC_SPEED_CONTROLLER_SLOWDOWN)
   {
-    istCtr = 0;
+    speedSlowDownCtr = 0;
+    dtspeed = dt * FOC_SPEED_CONTROLLER_SLOWDOWN;
+    // Force a step for the current controller
+    if((mControllerDebugCtr < (CONT_STORE_DEPTH/3)) || (!mStoreController))
+    // if((mObsDebugCounter < (OBS_STORE_DEPTH/3)) || (!mStoreObserver))
+    {
+      mCtrl.w_set = 150;
+    }
+    else
+    {
+      mCtrl.w_set = 250;
+    }
+    runSpeedController(&dtspeed);
+  }
+
+  if(++currSlowDownCtr == FOC_CURRENT_CONTROLLER_SLOWDOWN)
+  {
+    currSlowDownCtr = 0;
+    dtcurrent = dt * FOC_CURRENT_CONTROLLER_SLOWDOWN;
     // palSetPad(GPIOE,14);
     // chSysLockFromISR();
     // chBSemSignalI(&mIstSem);
@@ -1291,29 +1314,16 @@ CH_IRQ_HANDLER(VectorFC) {
     park(&mCtrl.ia_is, &mCtrl.ib_is, &mObs.theta, &id, &iq);
     UTIL_LP_FAST(mCtrl.id_is, id, FOC_LP_FAST_CONSTANT);
     UTIL_LP_FAST(mCtrl.iq_is, iq, FOC_LP_FAST_CONSTANT);
-    runSpeedController(&dt);
 
-    // Force a step for the current controller
-      // if((mControllerDebugCtr < (CONT_STORE_DEPTH/3)) || (!mStoreController))
-      // // if((mObsDebugCounter < (OBS_STORE_DEPTH/3)) || (!mStoreObserver))
-      // {
-      //   mState = MC_OPEN_LOOP;
-      // }
-      // else
-      // {
-      //   mState = MC_CLOSED_LOOP;
-      // }
     if(mState != MC_CLOSED_LOOP)
     {
-      mCtrl.id_set = 0.0; // override
-      mCtrl.iq_set = 5.0;
       mForcedCommutationMode = 1;
     }
     else
     {
       mForcedCommutationMode = 0;
     }
-    runCurrentController(&dt);
+    runCurrentController(&dtcurrent);
     // mCtrl.vd_set = FOC_FORCED_COMM_VD; // override
     // mCtrl.vq_set = FOC_FORCED_COMM_VQ;
     if(mForcedCommutationMode)

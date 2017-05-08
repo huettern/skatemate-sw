@@ -119,10 +119,8 @@ int main(void)
       mcfDumpData();
       ctr = 0;
     }
-    // utlmSend(0, 10, xdata, ydata);
-    // drvDumpStatus();
-    usbcdcHandleShell();
-    // palTogglePad(GPIOE,14);
+    
+    // usbcdcHandleShell();
   }
   
   
