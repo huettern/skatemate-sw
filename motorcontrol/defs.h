@@ -40,7 +40,7 @@
 #define DEFS_SHELL_STREAM SD3
 
 // DBG for usb debugging messages
-#define DBG(X, ...) chprintf(bssusb, X, ##__VA_ARGS__ )
+#define DBG(X, ...) chprintf((BaseSequentialStream *)&DEFS_SHELL_STREAM, X, ##__VA_ARGS__ )
 
 // DBG2 for slow UART debugging
 // #define DBG2(X, ...) chprintf((BaseSequentialStream *)&SD3, X, ##__VA_ARGS__ )

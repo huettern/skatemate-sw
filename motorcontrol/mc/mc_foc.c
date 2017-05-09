@@ -48,8 +48,8 @@
 /*===========================================================================*/
 // #define DEBUG_ADC
 // #define DEBUG_SVM
-//#define DEBUG_OBSERVER
-#define DEBUG_CONTROLLERS
+#define DEBUG_OBSERVER
+//#define DEBUG_CONTROLLERS
 
 #define DEBUG_DOWNSAMPLE_FACTOR 10
 
@@ -84,6 +84,10 @@
  */
 #define FOC_SPEED_CONTROLLER_SLOWDOWN 100
 /**
+ * How much to slow down the voltage measurements
+ */
+#define FOC_VOLT_MEAS_SLOWDOWN  10
+/**
  * Forced commutation settings
  */
 #define FOC_FORCED_COMM_FREQ -30.0
@@ -105,7 +109,8 @@
 #define FOC_PARAM_DEFAULT_OBS_GAIN    100e6
 #define FOC_PARAM_DEFAULT_OBS_SPEED_KP  2000.0  
 #define FOC_PARAM_DEFAULT_OBS_SPEED_KI  20000.0
-#define FOC_PARAM_DEFAULT_OBS_SPEED_KD  0.0
+#define FOC_PARAM_DEFAULT_OBS_SPEED_ITERM_MAX  10.0
+#define FOC_PARAM_DEFAULT_OBS_SPEED_ITERM_MIN  -10.0
 
 #define FOC_PARAM_DEFAULT_CURR_D_KP   0.03
 #define FOC_PARAM_DEFAULT_CURR_D_KI   0.0
@@ -132,6 +137,8 @@
  */
 #define BOARD_ADC_PIN_TO_AMP (float)(1000.0/DRV_CURRENT_GAIN)
 
+#define FOC_MEASURE_RES_NUM_SAMPLES 1000
+
 #define ADC_CH_PH_A    2
 #define ADC_CH_PH_B    1
 #define ADC_CH_PH_C    0
@@ -152,6 +159,13 @@ typedef struct {
   float ifloor;
 } piStruct_t;
 
+typedef struct {
+  int nCurrSamples;
+  int nVoltSamples;
+  float curr_sum;
+  float volt_sum;
+  bool measure_inductance;
+} sample_t;
 
 /*===========================================================================*/
 /* private data                                                              */
@@ -171,7 +185,7 @@ static mcfController_t mCtrl;
 /**
  * @brief      Observer working set
  */
-static mcfObs_t mObs;
+static volatile mcfObs_t mObs;
 
 static volatile uint16_t mADCValue[8]; // raw converted values
 
@@ -199,7 +213,7 @@ static volatile float mOBSValueStore[OBS_STORE_DEPTH][6];
 static volatile uint8_t mStoreObserver;
 static uint16_t mObsDebugCounter;
 #ifdef DEBUG_CONTROLLERS
-  #define CONT_STORE_DEPTH 800
+  #define CONT_STORE_DEPTH 200
 #else
   #define CONT_STORE_DEPTH 1
 #endif
@@ -208,7 +222,9 @@ static volatile uint8_t mStoreController;
 static uint16_t mControllerDebugCtr;
 static uint8_t mStartStore = 0;
 
-static uint8_t mForcedCommutationMode = 1;
+static float mForcedCommFreq = 0;
+static float mForcedCommVd = 0;
+static float mForcedCommVq = 0;
 
 static piStruct_t mpiSpeed;
 static piStruct_t mpiId;
@@ -217,6 +233,9 @@ static piStruct_t mpiSpeedObs;
 static piStruct_t mpiSpeed;
 
 static mcState_t mState = MC_HALT;
+static sample_t mSample;
+
+static float mMeasuredResistance = 0;
 
 /*===========================================================================*/
 /* SHELL settings                                                            */
@@ -231,6 +250,13 @@ static const usbcdcParameterStruct_t mShellSpeedKp = {"speed_kp", &mpiSpeed.kp};
 static const usbcdcParameterStruct_t mShellSpeedKi = {"speed_ki", &mpiSpeed.ki};
 static const usbcdcParameterStruct_t mShellObsGain = {"obs_gain", &mFOCParms.obsGain};
 static const usbcdcParameterStruct_t mShellwSet = {"w_set", &mCtrl.w_set};
+static const usbcdcParameterStruct_t mShellIdSet = {"id_set", &mCtrl.id_set};
+static const usbcdcParameterStruct_t mShellIqSet = {"iq_set", &mCtrl.iq_set};
+
+static const usbcdcParameterStruct_t mShellL = {"ls", &mMotParms.Ls};
+static const usbcdcParameterStruct_t mShellR = {"rs", &mMotParms.Rs};
+static const usbcdcParameterStruct_t mShellPSI = {"psi", &mMotParms.psi};
+static const usbcdcParameterStruct_t mShellLambda = {"lambda", &mFOCParms.obsGain};
 
 static const usbcdcParameterStruct_t* mShellVars[] = 
 {
@@ -244,6 +270,12 @@ static const usbcdcParameterStruct_t* mShellVars[] =
   &mShellwSet,
   &mShellSpeedKp,
   &mShellSpeedKi,
+  &mShellIdSet,
+  &mShellIqSet,
+  &mShellL,
+  &mShellR,
+  &mShellPSI,
+  &mShellLambda,
   NULL
 };
 
@@ -647,6 +679,50 @@ void mcfStartSample(void)
 {
   mStartStore = 1;
 }
+/**
+ * @brief      Routine to measure the resistance from fet, motor and cables
+ * @note       Runs the motor in openloop, measures d-q-currents and supply voltage then
+ * calculates the resistance
+ */
+void mcfMeasureResistance(void)
+{
+  float curr, volt;
+  uint16_t ctr = 0;
+  mMeasuredResistance = 0.0;
+
+  // Spin up motor in forced commutation
+  mForcedCommFreq = FOC_FORCED_COMM_FREQ;
+  mForcedCommVd = FOC_FORCED_COMM_VD;
+  mForcedCommVq = FOC_FORCED_COMM_VQ;
+  mState = MC_OPEN_LOOP;
+
+  // Wait for motor to spin
+  chThdSleepMilliseconds(3000);
+
+  // Start sampling
+  memset(&mSample, 0, sizeof(sample_t));
+  nvicEnableVector(ADC1_2_IRQn, 8);
+
+  while((mSample.nCurrSamples < FOC_MEASURE_RES_NUM_SAMPLES) || 
+    (mSample.nVoltSamples < FOC_MEASURE_RES_NUM_SAMPLES))
+  {
+    chThdSleepMilliseconds(10);
+    // timeout
+    if(++ctr > 500) break;
+  }
+    
+  mState = MC_HALT;
+  nvicDisableVector(ADC1_2_IRQn);
+
+  curr = mSample.curr_sum / FOC_MEASURE_RES_NUM_SAMPLES;
+  volt = (mSample.volt_sum / FOC_MEASURE_RES_NUM_SAMPLES) * 
+    sqrtf(mForcedCommVd*mForcedCommVd + mForcedCommVq*mForcedCommVq);
+
+  mMeasuredResistance = (volt / curr) * (2.0 / 3.0);
+
+  DBG("Avg curr = %f\r\nAvg volt = %f\r\n--->Rs=%f Ohm\r\n", curr, volt, mMeasuredResistance);
+}
+
 /*===========================================================================*/
 /* Module static functions.                                                  */
 /*===========================================================================*/
@@ -660,10 +736,11 @@ static THD_FUNCTION(mcfocMainThread, arg) {
   (void)arg;
   chRegSetThreadName(DEFS_THD_MCFOC_MAIN_NAME);
 
-  mCtrl.w_set = 200;
   mState = MC_OPEN_LOOP;
   chThdSleepMilliseconds(1500);
-  mState = MC_CLOSED_LOOP;
+  DBG3("Starting Res measurement\r\n");
+  mcfMeasureResistance();
+  mState = MC_CLOSED_LOOP_CURRENT;
   while (true) 
   {
     chThdSleepMilliseconds(3000);
@@ -759,7 +836,8 @@ static void dataInit(void)
   mFOCParms.obsGain = FOC_PARAM_DEFAULT_OBS_GAIN;
   mFOCParms.obsSpeed_kp = FOC_PARAM_DEFAULT_OBS_SPEED_KP;
   mFOCParms.obsSpeed_ki = FOC_PARAM_DEFAULT_OBS_SPEED_KI;
-  mFOCParms.obsSpeed_kd = FOC_PARAM_DEFAULT_OBS_SPEED_KD;
+  mFOCParms.obsSpeed_ceil = FOC_PARAM_DEFAULT_OBS_SPEED_ITERM_MAX;
+  mFOCParms.obsSpeed_floor = FOC_PARAM_DEFAULT_OBS_SPEED_ITERM_MIN;
   mFOCParms.curr_d_kp = FOC_PARAM_DEFAULT_CURR_D_KP;
   mFOCParms.curr_d_ki = FOC_PARAM_DEFAULT_CURR_D_KI;
   mFOCParms.curr_q_kp = FOC_PARAM_DEFAULT_CURR_Q_KP;
@@ -767,6 +845,7 @@ static void dataInit(void)
   mFOCParms.speed_kp = FOC_PARAM_DEFAULT_SPEED_KP;
   mFOCParms.iTermCeil = FOC_PARAM_DEFAULT_ITERM_CEIL;
   mFOCParms.iTermFloor = FOC_PARAM_DEFAULT_ITERM_FLOOR;
+  mFOCParms.obsSpeed_ceil = FOC_PARAM_DEFAULT_OBS_SPEED_ITERM_MAX;
 
   mObs.x[0] = 0.0; mObs.x[1] = 0.0;
   mObs.eta[0] = 0.0; mObs.eta[1] = 0.0;
@@ -785,6 +864,10 @@ static void dataInit(void)
   mCtrl.vd_set = 0.0;
   mCtrl.vq_set = 0.0;
 
+  mForcedCommFreq = FOC_FORCED_COMM_FREQ;
+  mForcedCommVd = FOC_FORCED_COMM_VD;
+  mForcedCommVq = FOC_FORCED_COMM_VQ;
+
   // PID Controllers
   mpiId.kp = mFOCParms.curr_d_kp;
   mpiId.ki = mFOCParms.curr_d_ki;
@@ -801,14 +884,16 @@ static void dataInit(void)
   mpiSpeedObs.kp = mFOCParms.obsSpeed_kp;
   mpiSpeedObs.ki = mFOCParms.obsSpeed_ki;
   mpiSpeedObs.istate = 0;
-  mpiSpeedObs.iceil = mFOCParms.iTermCeil;
-  mpiSpeedObs.ifloor = mFOCParms.iTermFloor;
+  mpiSpeedObs.iceil = mFOCParms.obsSpeed_ceil;
+  mpiSpeedObs.ifloor = mFOCParms.obsSpeed_floor;
 
   mpiSpeed.kp = mFOCParms.speed_kp;
   mpiSpeed.ki = mFOCParms.speed_ki;
   mpiSpeed.istate = 0;
   mpiSpeed.iceil = mFOCParms.iTermCeil;
   mpiSpeed.ifloor = mFOCParms.iTermFloor;
+
+  memset(&mSample, 0, sizeof(sample_t));
 }
 /**
  * @brief      Calibrates all analog signals
@@ -1153,8 +1238,8 @@ static void runCurrentController (float* dt)
   mCtrl.vd_set = piController(&mpiId, d_err, dt);
   mCtrl.vq_set = piController(&mpiIq, q_err, dt);
 
-  mCtrl.vd_set -= mObs.omega_e * mMotParms.Ls;
-  mCtrl.vq_set += mObs.omega_e * mMotParms.Ls;
+  // mCtrl.vd_set -= mObs.omega_e * mMotParms.Ls;
+  // mCtrl.vq_set += mObs.omega_e * mMotParms.Ls;
   // mCtrl.vq_set += mObs.omega_e * mMotParms.psi;
 
 #ifdef DEBUG_CONTROLLERS
@@ -1230,12 +1315,11 @@ static void runOutputsWithoutObserver(float theta)
 static void forcedCommutation (void)
 {
   static float t = 0.0;
-  static const float freq = FOC_FORCED_COMM_FREQ;
   static float theta;
 
-  theta = 2*PI*FOC_FORCED_COMM_FREQ*(t); //800ns
-  mCtrl.vd_set = FOC_FORCED_COMM_VD;
-  mCtrl.vq_set = FOC_FORCED_COMM_VQ;
+  theta = 2*PI*mForcedCommFreq*(t); //800ns
+  mCtrl.vd_set = mForcedCommVd;
+  mCtrl.vq_set = mForcedCommVq;
   t += ((float)FOC_CURRENT_CONTROLLER_SLOWDOWN / FOC_F_SW);
   runOutputsWithoutObserver(theta);
 }
@@ -1248,10 +1332,19 @@ static void forcedCommutation (void)
  */
 CH_IRQ_HANDLER(Vector88) {
   static uint16_t ctr = 0;
+  static float vd, vq;
+  static uint16_t voltmeasSlowDownCtr = 0;
   CH_IRQ_PROLOGUE();
   ADC_ClearITPendingBit(ADC1, ADC_IT_EOS);
   ADC1->CR |= ADC_CR_ADSTART;
 
+
+  if(++voltmeasSlowDownCtr == FOC_VOLT_MEAS_SLOWDOWN)
+  {
+    voltmeasSlowDownCtr = 0;
+    mSample.volt_sum += ADC_VOLT(ADC_CH_SUPPL);
+    mSample.nVoltSamples++;
+  }
   if(mStoreADC1)
   {
     // copy to store reg
@@ -1280,7 +1373,7 @@ CH_IRQ_HANDLER(VectorFC) {
 
   CH_IRQ_PROLOGUE();
   chSysLockFromISR();
-  palSetPad(GPIOE,14);
+  // palSetPad(GPIOE,14);
 
   ADC_ClearITPendingBit(ADC3, ADC_IT_EOS);
   ADC3->CR |= ADC_CR_ADSTART;
@@ -1295,13 +1388,26 @@ CH_IRQ_HANDLER(VectorFC) {
   runPositionObserver(&dt); // 8.765us
   runSpeedObserver(&dt); // 2.895us
 
+  if((mControllerDebugCtr < (CONT_STORE_DEPTH/3)) || (!mStoreController))
+  {
+    // mCtrl.iq_set = 2.0;
+  }
+  else
+  {
+    // mCtrl.iq_set = 4.0;
+  }
+
   if(++speedSlowDownCtr == FOC_SPEED_CONTROLLER_SLOWDOWN)
   {
     speedSlowDownCtr = 0;
     dtspeed = dt * FOC_SPEED_CONTROLLER_SLOWDOWN;
     // Force a step for the current controller
+    #ifdef DEBUG_CONTROLLERS
     if((mControllerDebugCtr < (CONT_STORE_DEPTH/3)) || (!mStoreController))
-    // if((mObsDebugCounter < (OBS_STORE_DEPTH/3)) || (!mStoreObserver))
+    #endif
+    #ifdef DEBUG_OBSERVER
+    if((mObsDebugCounter < (OBS_STORE_DEPTH/2)) || (!mStoreObserver))
+    #endif
     {
       mCtrl.w_set = 150;
     }
@@ -1309,7 +1415,10 @@ CH_IRQ_HANDLER(VectorFC) {
     {
       mCtrl.w_set = 250;
     }
-    runSpeedController(&dtspeed);
+    if(mState == MC_CLOSED_LOOP_SPEED)
+    {
+      // runSpeedController(&dtspeed);
+    }
   }
 
   if(++currSlowDownCtr == FOC_CURRENT_CONTROLLER_SLOWDOWN)
@@ -1325,21 +1434,24 @@ CH_IRQ_HANDLER(VectorFC) {
     UTIL_LP_FAST(mCtrl.id_is, id, FOC_LP_FAST_CONSTANT);
     UTIL_LP_FAST(mCtrl.iq_is, iq, FOC_LP_FAST_CONSTANT);
 
-    if(mState != MC_CLOSED_LOOP)
-    {
-      mForcedCommutationMode = 1;
-    }
-    else
-    {
-      mForcedCommutationMode = 0;
-    }
     runCurrentController(&dtcurrent);
     // mCtrl.vd_set = FOC_FORCED_COMM_VD; // override
     // mCtrl.vq_set = FOC_FORCED_COMM_VQ;
-    if(mForcedCommutationMode)
+    if(mState == MC_HALT)
+    {
+      TIMER_UPDATE_DUTY(0,0,0);
+    }
+    else if(mState == MC_OPEN_LOOP)
+    {
       forcedCommutation();
+    }
     else
+    {
       runOutputs(); 
+    }
+
+    mSample.curr_sum += sqrtf(mCtrl.id_is * mCtrl.id_is + mCtrl.iq_is * mCtrl.iq_is);
+    mSample.nCurrSamples++;
   }
 
 #ifdef DEBUG_ADC
@@ -1356,7 +1468,8 @@ CH_IRQ_HANDLER(VectorFC) {
   }
 #endif
 
-  palClearPad(GPIOE,14);
+
+  // palClearPad(GPIOE,14);
   chSysUnlockFromISR(); 
   CH_IRQ_EPILOGUE();
 }

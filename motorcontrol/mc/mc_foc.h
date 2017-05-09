@@ -38,7 +38,8 @@ typedef struct
   float obsGain;
   float obsSpeed_kp;
   float obsSpeed_ki;
-  float obsSpeed_kd;
+  float obsSpeed_ceil;
+  float obsSpeed_floor;
   float curr_d_kp;
   float curr_d_ki;
   float curr_q_kp;
@@ -73,8 +74,12 @@ typedef struct
   float iq_is;
   float vd_set;
   float vq_set;
+  float vd_is;
+  float vq_is;
   float ia_is;
   float ib_is;
+  float va_is;
+  float vb_is;
   float ia_set;
   float ib_set;
   float va_set;
@@ -82,12 +87,16 @@ typedef struct
   float ipa_is;
   float ipb_is;
   float ipc_is;
+  float vpa_is;
+  float vpb_is;
+  float vpc_is;
 } mcfController_t;
 
 typedef enum {
-  MC_HALT,
-  MC_OPEN_LOOP,
-  MC_CLOSED_LOOP
+  MC_HALT = 0,
+  MC_OPEN_LOOP = 1,
+  MC_CLOSED_LOOP_CURRENT = 2,
+  MC_CLOSED_LOOP_SPEED = 3
 } mcState_t;
 
 /*===========================================================================*/
