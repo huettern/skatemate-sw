@@ -17,37 +17,26 @@
 #define PWM                   OCR0A
 
 enum Routine{Battery, Charge_CC, Charge_CV, Balance, Shutdown}state;
-static char *statetext[]={"BAT", "CCC", "CCV", "BAL", "SHT"};         //DEV
 volatile unsigned int second=0;     //Timeout counter
 int cell[6];                        //cellVoltage
-int dev_cell[6];                    //Test Cells DEV-----------------------------------------------------------
-int cell_Max=0;
-int cell_Min=0;
-int current=0;
-int inputVoltage=0;
+int cell_Max      =0;
+int cell_Min      =0;
+int current       =0;
+int inputVoltage  =0;
 
 
-void init_timer(){      
+void init_timer(void){      
   //Timer 1    
   TCCR1A =  0x00;           // Clear Register (some bits were Preset...)
   TCCR1B =  (1<<WGM12);     // Clear Timer on Compare match (CTC) mode (mode 4)
-  TCCR1B|=  (1<<CS12);      // start Timer1 with Prescaler = 256 (16MHz^-1 * 256 * 65536 = max ~1.04s)          // 128 with 8MHz!!!!!!!!
-  OCR1A  =  62500;          // 1 sec tics (Match Register A) (16MHz/256)
+  TCCR1B|=  (1<<CS12);      // start Timer1 with Prescaler = 256 (16MHz^-1 * 256 * 65536 = max ~2,17s)          
+  OCR1A  =  31250;          // 1 sec tics (Match Register A) (8MHz/256)
   TIMSK1|=  (1<<OCIE1A);    // enable/allow Timer1 Compare A Match Interrupt Enable
   sei();                    // enable Interrupts
 }
 
 ISR(TIMER1_COMPA_vect){
-    second++;
-    //DEV OUTPUT                ------------------------------------------------------------------
-
-        //DEV Laden
-    for(int i=0; i<=5; i++){
-      dev_cell[i]+=PWM/61;
-    }                           //  ------------------------------------------------------------------
-
-
-    
+    second++;   
 }
 
 void init_PWM(void){
@@ -105,7 +94,7 @@ void init_IO(){
 void init_ADC(){
     ADMUX   = (1<<REFS0);                             // URef= VCC
     ADCSRB  = 0x00;                                   // clear register
-    ADCSRA  = (1<<ADPS2)|(1<<ADPS1)|(1<<ADPS0);       // Prescaler 16GHz/128 = 125kHz (50-200kHz)                                für 8MHz  auf 64 stellen!!!!!
+    ADCSRA  = (1<<ADPS2)|(1<<ADPS1);                  // Prescaler 64:  8GHz/64 = 125kHz (50-200kHz)    
     ADCSRA |= (1<<ADEN);                              // Enable ADC
   }
 
@@ -116,8 +105,8 @@ int ADC_Read(int ch)
   
   ADCSRA|=(1<<ADSC);        //trigger Conversion
   while(ADCSRA&(1<<ADSC))   //wait for 1st Conversion finished
-  {
-  }
+  {                        
+  }// drop first conversation after channel switch 
   
   ADCSRA|=(1<<ADSC);        //trigger Conversion
   while(ADCSRA&(1<<ADSC))   //wait for 2st Conversion finished
@@ -129,7 +118,6 @@ int ADC_Read(int ch)
 
 void ReadCell(void){
         // Read
-        cli();//DEV (disable interrupt)------------------------------------------------------------------
         PORTD|=(1<<6);     //V_MEAS on
         cell[0]=ADC_Read(0)- TRAN_VOLTAGE;      
         cell[1]=ADC_Read(1)*2-ADC_Read(0)  - TRAN_VOLTAGE;     
@@ -137,22 +125,11 @@ void ReadCell(void){
         cell[3]=ADC_Read(3)*4-ADC_Read(2)*3- TRAN_VOLTAGE;
         cell[4]=ADC_Read(4)*5-ADC_Read(3)*4- TRAN_VOLTAGE;
         cell[5]=ADC_Read(5)*6-ADC_Read(4)*5- TRAN_VOLTAGE;
-        current= ADC_Read(6); 
-        inputVoltage= ADC_Read(7);
         PORTD&=~(1<<6);  //V_MEAS off
         
-        //DEV                     ------------------------------------------------------------------
-        cell[0]=dev_cell[0]+10;
-        cell[1]=dev_cell[1]+30;
-        cell[2]=dev_cell[2]-20;
-        cell[3]=dev_cell[3]+5;
-        cell[4]=dev_cell[4]-10;
-        cell[5]=dev_cell[5];
-        inputVoltage=400;
-        current=400;
-                             //    ------------------------------------------------------------------
-
-        
+        current= ADC_Read(6); 
+        inputVoltage= ADC_Read(7);
+                
         //find Min/Max
         cell_Max=cell[0];
         cell_Min=cell[0];
@@ -161,20 +138,10 @@ void ReadCell(void){
           if(cell[i]<cell_Min){cell_Min=cell[i];} 
           }
 
-        // check for Errors
+        // check for Errors/ undervoltage protection
         if(cell_Min<=CELL_VOLATGE_MIN){
-          cell_Min=0;
-          cell[0]=0;
-          cell[1]=0;
-          cell[2]=0;
-          cell[3]=0;
-          cell[4]=0;
-          cell[5]=0;
+          state=Shutdown;
         } 
-        
-        
-
-        sei();//DEV (enable interrupt)
   }
   
 void Statemachine(){
@@ -242,7 +209,6 @@ void Statemachine(){
           if(cell[i]>cell_Min){
             //zelle i entladen
             PORTD |= (1<<i); //Ci on (Balancer Transistoren)
-            dev_cell[i]--;                                                    //DEV
           }
           else{
             // zellentransistor schliessen 
@@ -265,69 +231,20 @@ void Statemachine(){
   }
 }
 
-void setup()
+void init()
 {
   init_IO();
   init_timer();
   init_ADC();
-  //Serial.begin(9600);         // Begin the serial monitor (DEV)
   state=Battery;                // Start State
-
-  for(int i=0; i<=5; i++){      //DEV
-    dev_cell[i]=830;
-    }
 }
 
 
 
-void loop(){
-  ReadCell();
-  Statemachine(); 
-
-
-//DEV
-/*
-    Serial.println("###############################");
-    Serial.print("inputVolt");
-    Serial.println(analogRead(7));
-    
-    Serial.print("Time  : ");
-    Serial.println(second);
-    
-    Serial.print("State : ");
-    Serial.println(statetext[state]);
-    
-    Serial.print("MAX   : ");
-    Serial.print((double)cell_Max/204,8);
-    Serial.print(" V (");
-    Serial.print(cell_Max);
-    Serial.println(")");
-    
-    Serial.print("MIN   : ");
-    Serial.print((double)cell_Min/204,8);
-    Serial.print(" V (");
-    Serial.print(cell_Min);
-    Serial.println(")");
-    
-    Serial.print("PWM   : ");
-    Serial.print((PWM*100)/256);
-    Serial.println("%");
-    
-    Serial.print("\ncell 0: ");
-    Serial.println(read_adc(0));
-    Serial.print("cell 1: ");
-    Serial.println(cell[1]);
-    Serial.print("cell 2: ");
-    Serial.println(cell[2]);
-    Serial.print("cell 3: ");
-    Serial.println(cell[3]);
-    Serial.print("cell 4: ");
-    Serial.println(cell[4]);
-    Serial.print("cell 5: ");
-    Serial.println(cell[5]);
-    Serial.print("\n \n \n"); 
-    
-    delay(100);*/
- 
-
+void main(){
+  init();
+  while(1){
+    ReadCell();
+    Statemachine(); 
+  }
 }
