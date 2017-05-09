@@ -17,10 +17,10 @@
 #define PWM                   OCR0A
 
 enum Routine{Battery, Charge_CC, Charge_CV, Balance, Shutdown}state;
-static char *statetext[]={"BAT", "CCC", "CCV", "BAL", "SHT"};
+static char *statetext[]={"BAT", "CCC", "CCV", "BAL", "SHT"};         //DEV
 volatile unsigned int second=0;     //Timeout counter
 int cell[6];                        //cellVoltage
-int dev_cell[6];                    //Test Cells-----------------------------------------------------------
+int dev_cell[6];                    //Test Cells DEV-----------------------------------------------------------
 int cell_Max=0;
 int cell_Min=0;
 int current=0;
@@ -31,10 +31,23 @@ void init_timer(){
   //Timer 1    
   TCCR1A =  0x00;           // Clear Register (some bits were Preset...)
   TCCR1B =  (1<<WGM12);     // Clear Timer on Compare match (CTC) mode (mode 4)
-  TCCR1B|=  (1<<CS12);      // start Timer1 with Prescaler = 256 (16MHz^-1 * 256 * 65536 = max ~1.04s)
+  TCCR1B|=  (1<<CS12);      // start Timer1 with Prescaler = 256 (16MHz^-1 * 256 * 65536 = max ~1.04s)          // 128 with 8MHz!!!!!!!!
   OCR1A  =  62500;          // 1 sec tics (Match Register A) (16MHz/256)
   TIMSK1|=  (1<<OCIE1A);    // enable/allow Timer1 Compare A Match Interrupt Enable
   sei();                    // enable Interrupts
+}
+
+ISR(TIMER1_COMPA_vect){
+    second++;
+    //DEV OUTPUT                ------------------------------------------------------------------
+
+        //DEV Laden
+    for(int i=0; i<=5; i++){
+      dev_cell[i]+=PWM/61;
+    }                           //  ------------------------------------------------------------------
+
+
+    
 }
 
 void init_PWM(void){
@@ -91,43 +104,43 @@ void init_IO(){
 
 void init_ADC(){
     ADMUX   = (1<<REFS0);                             // URef= VCC
-    ADCSRB  = 0x00;                                   // Kanal ADC0 (PA0) schalten
-    ADCSRA  = (1<<ADPS2)|(1<<ADPS1)|(1<<ADPS0);       // Prescaler 16GHz/128 = 125kHz (50-200kHz)
+    ADCSRB  = 0x00;                                   // clear register
+    ADCSRA  = (1<<ADPS2)|(1<<ADPS1)|(1<<ADPS0);       // Prescaler 16GHz/128 = 125kHz (50-200kHz)                                für 8MHz  auf 64 stellen!!!!!
     ADCSRA |= (1<<ADEN);                              // Enable ADC
   }
 
-int read_adc(void)
+int ADC_Read(int ch)
 {
+  ADMUX &= 0b11111000;      // clear MUX bit
+  ADMUX |= ch;              // select new channel
+  
   ADCSRA|=(1<<ADSC);        //trigger Conversion
-  while(ADCSRA&(1<<ADSC))   //wait for Conversion finished
+  while(ADCSRA&(1<<ADSC))   //wait for 1st Conversion finished
+  {
+  }
+  
+  ADCSRA|=(1<<ADSC);        //trigger Conversion
+  while(ADCSRA&(1<<ADSC))   //wait for 2st Conversion finished
   {
   }
   return ADC;
 }
 
-ISR(TIMER1_COMPA_vect){
-    second++;
-    //DEV OUTPUT                ------------------------------------------------------------------
-
-        //DEV Laden
-    for(int i=0; i<=5; i++){
-      dev_cell[i]+=PWM/61;
-    }                           //  ------------------------------------------------------------------
-}
 
 void ReadCell(void){
         // Read
-   /*     cli();//DEV (disable interrupt)------------------------------------------------------------------
+        cli();//DEV (disable interrupt)------------------------------------------------------------------
         PORTD|=(1<<6);     //V_MEAS on
-        cell[0]=analogRead(PC0)- TRAN_VOLTAGE;      
-        cell[1]=analogRead(PC1)*2-analogRead(PC0)  - TRAN_VOLTAGE;     
-        cell[2]=analogRead(PC2)*3-analogRead(PC1)*2- TRAN_VOLTAGE;
-        cell[3]=analogRead(PC2)*4-analogRead(PC1)*3- TRAN_VOLTAGE;
-        cell[4]=analogRead(PC2)*5-analogRead(PC1)*4- TRAN_VOLTAGE;
-        cell[5]=analogRead(PC2)*6-analogRead(PC1)*5- TRAN_VOLTAGE;
-        inputVoltage=analogRead(7);
+        cell[0]=ADC_Read(0)- TRAN_VOLTAGE;      
+        cell[1]=ADC_Read(1)*2-ADC_Read(0)  - TRAN_VOLTAGE;     
+        cell[2]=ADC_Read(2)*3-ADC_Read(1)*2- TRAN_VOLTAGE;
+        cell[3]=ADC_Read(3)*4-ADC_Read(2)*3- TRAN_VOLTAGE;
+        cell[4]=ADC_Read(4)*5-ADC_Read(3)*4- TRAN_VOLTAGE;
+        cell[5]=ADC_Read(5)*6-ADC_Read(4)*5- TRAN_VOLTAGE;
+        current= ADC_Read(6); 
+        inputVoltage= ADC_Read(7);
         PORTD&=~(1<<6);  //V_MEAS off
-        */
+        
         //DEV                     ------------------------------------------------------------------
         cell[0]=dev_cell[0]+10;
         cell[1]=dev_cell[1]+30;
@@ -136,7 +149,7 @@ void ReadCell(void){
         cell[4]=dev_cell[4]-10;
         cell[5]=dev_cell[5];
         inputVoltage=400;
-        
+        current=400;
                              //    ------------------------------------------------------------------
 
         
@@ -172,9 +185,9 @@ void Statemachine(){
     case Battery:
       if(inputVoltage>=300){
         PORTD&=~(1<<7);         // Shutoff EngineControl (Noah)
-        PORTD&=~(1<<6);         //V_MEAS off (ADC Mess Transistoren)
-        PORTD&=~(0b111111);     //C1-C6 off  (Balancer Transistoren)
-        PWM   = 0x00;           //PWM_OFF
+        PORTD&=~(1<<6);         // V_MEAS off (ADC Mess Transistoren)
+        PORTD&=~(0b111111);     // C1-C6 off  (Balancer Transistoren)
+        PWM   = 0x00;           // PWM_OFF
         state=Charge_CC;
         }
       else{
@@ -301,7 +314,7 @@ void loop(){
     Serial.println("%");
     
     Serial.print("\ncell 0: ");
-    Serial.println(cell[0]);
+    Serial.println(read_adc(0));
     Serial.print("cell 1: ");
     Serial.println(cell[1]);
     Serial.print("cell 2: ");
