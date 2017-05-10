@@ -48,6 +48,19 @@ typedef struct
   float speed_ki;
   float iTermCeil;
   float iTermFloor;
+  float dutyMax;
+  float minErpm;
+  float currMin;
+  float currMax;
+  float currInMin;
+  float currInMax;
+  float duty_dowmramp_kp;
+  float duty_dowmramp_ki;
+  float dCurrInjDuty;
+  float dCurrInjFactor;
+  float openloop_rpm;
+  float openloop_hyst;
+  float openloop_time;
 } mcfFOCParameter_t;
 
 typedef struct
@@ -68,10 +81,13 @@ typedef struct
 {
   float w_set;  // [rpm]
   float w_is;
+  float duty_set;
   float id_set;
   float id_is;
+  float id_is_filter;
   float iq_set;
   float iq_is;
+  float iq_is_filter;
   float vd_set;
   float vq_set;
   float vd_is;
@@ -87,17 +103,40 @@ typedef struct
   float ipa_is;
   float ipb_is;
   float ipc_is;
+  float vsupply;
+  float isupply;
   float vpa_is;
   float vpb_is;
   float vpc_is;
+  float fc_f;
+  float fc_vd;
+  float fc_vq;
+  float mod_d;
+  float mod_q;
+  float phase;
+  float duty_now;
+  float max_duty;
+  float i_abs;
+  float i_abs_filter;
 } mcfController_t;
+
+typedef enum {
+   MC_STATE_OFF = 0,
+   MC_STATE_DETECTING,
+   MC_STATE_RUNNING,
+   MC_STATE_FULL_BRAKE,
+} mcState_t;
 
 typedef enum {
   MC_HALT = 0,
   MC_OPEN_LOOP = 1,
   MC_CLOSED_LOOP_CURRENT = 2,
-  MC_CLOSED_LOOP_SPEED = 3
-} mcState_t;
+  MC_CLOSED_LOOP_SPEED = 3,
+  MC_CONTROL_MODE_DUTY,
+  MC_CONTROL_MODE_CURRENT_BRAKE,
+  MC_CONTROL_MODE_CURRENT,
+  MC_CONTROL_MODE_SPEED
+} mcMode_t;
 
 /*===========================================================================*/
 /* MC_FOC public functions.                                                  */

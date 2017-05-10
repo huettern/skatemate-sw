@@ -320,7 +320,73 @@ float stof(const char* s)
     }
   }
   return rez * fact;
-};
+}
+
+/**
+ * Get the difference between two angles. Will always be between -180 and +180 degrees.
+ * @param angle1
+ * The first angle
+ * @param angle2
+ * The second angle
+ * @return
+ * The difference between the angles
+ */
+float angle_difference(float angle1, float angle2) 
+{
+//  utils_norm_angle(&angle1);
+//  utils_norm_angle(&angle2);
+//
+//  if (fabsf(angle1 - angle2) > 180.0) {
+//    if (angle1 < angle2) {
+//      angle1 += 360.0;
+//    } else {
+//      angle2 += 360.0;
+//    }
+//  }
+//
+//  return angle1 - angle2;
+
+  // Faster in most cases
+  float difference = angle1 - angle2;
+  while (difference < -180.0) difference += 2.0 * 180.0;
+  while (difference > 180.0) difference -= 2.0 * 180.0;
+  return difference;
+}
+/**
+ * Get the difference between two angles. Will always be between -pi and +pi radians.
+ * @param angle1
+ * The first angle in radians
+ * @param angle2
+ * The second angle in radians
+ * @return
+ * The difference between the angles in radians
+ */
+float angle_difference_rad(float angle1, float angle2) 
+{
+  float difference = angle1 - angle2;
+  while (difference < -PI) difference += 2.0 * PI;
+  while (difference > PI) difference -= 2.0 * PI;
+  return difference;
+}
+
+int truncate_number(float *number, float min, float max) {
+  int did_trunc = 0;
+
+  if (*number > max) {
+    *number = max;
+    did_trunc = 1;
+  } else if (*number < min) {
+    *number = min;
+    did_trunc = 1;
+  }
+
+  return did_trunc;
+}
+
+float utilMap(float x, float in_min, float in_max, float out_min, float out_max) 
+{
+  return (x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min;
+}
 
 /** @} */
 
