@@ -168,6 +168,7 @@ void Statemachine(){
           }
         }
        if(second>=600){          // Timeout after 10 min no battery usage
+	      PWM=0x00;
           state=Shutdown;  
        }
       break;  
@@ -184,12 +185,16 @@ void Statemachine(){
         if(cell_Min>=CELL_VOLTAGE_SOLL){
           state=Charge_CV;
           }
+		if(current<= 10){	//pull the cord
+			PORTB&=~(1<<1);	// Turn off LED1
+			state=Battery;
+		}
         break;
 
     case Charge_CV:
         PORTB |= (1<<0);  //Turn on LED 2
         
-        if(cell_Max>=CELL_VOLTAGE_SOLL && PWM>=1){
+        if(cell_Max>CELL_VOLTAGE_SOLL && PWM>=1){
           PWM--; // decrement current (PWM)
         }
         else if(cell_Max<=CELL_VOLTAGE_SOLL && PWM<=254){
@@ -199,8 +204,14 @@ void Statemachine(){
           state=Balance;
           }
         if(current<= MIN_CURRENT){
+		  PWM=0x00;
+		  PORTD|=(1<<3);	//Turn on LED3
           state=Shutdown;
           }
+		if(current<= 10){	//pull the cord
+			PORTB&=~(0b11);	// Turn off LED1 and LED2
+			state=Battery;
+		}
         break;
 
     case Balance:
