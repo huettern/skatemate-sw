@@ -97,6 +97,11 @@
  * Maximum current
  */
 #define FOC_PARAM_DEFAULT_CURR_MAX 10.0
+/**
+ * is the abs value of the current factor below this value, the motor will be
+ * released
+ */
+#define FOC_PARAM_DEFAULT_CURR_FAC_DEADBAND 0.05
 
 /**
  * Motor default parameters
@@ -343,6 +348,9 @@ static void analogCalibrate(void);
 static void drvDCCal(void);
 
 static void svm (float* a, float* b, uint16_t* da, uint16_t* db, uint16_t* dc);
+
+static void lockMotor(void);
+static void releaseMotor(void);
 
 static void clark (float* va, float* vb, float* vc, float* a, float* b);
 static void park (float* a, float* b, float* theta, float* d, float* q );
@@ -624,6 +632,7 @@ void mcfInit(void)
   /**
    * Enable timer
    */
+  releaseMotor();
   TIM_Cmd(TIM1, ENABLE);
 
   /**
@@ -666,8 +675,33 @@ void mcfSetDuty (uint16_t a, uint16_t b, uint16_t c)
  */
 void mcfSetCurrentFactor(float in)
 {
-  mState = MC_CLOSED_LOOP_CURRENT;
-  mCtrl.iq_set = in * FOC_PARAM_DEFAULT_CURR_MAX;
+  bool is_in_db = fabsf(in) < FOC_PARAM_DEFAULT_CURR_FAC_DEADBAND;
+  if(is_in_db)
+  {
+    // switch to state HALT
+    if(mState != MC_HALT)
+    {
+      // transition to released state
+      releaseMotor();
+      mCtrl.iq_set = 0.0;
+      mState = MC_HALT;
+    }
+  }
+  else
+  {
+    if(mState == MC_HALT)
+    {
+      // factor is outside deadband but the motor is released
+      mState = MC_CLOSED_LOOP_CURRENT;
+      mCtrl.iq_set = in * FOC_PARAM_DEFAULT_CURR_MAX;
+      lockMotor();
+    }
+    else
+    {
+      // Motor is running and duty is outside deadband
+      mCtrl.iq_set = in * FOC_PARAM_DEFAULT_CURR_MAX;
+    }
+  }
 }
 
 /**
@@ -752,16 +786,14 @@ static THD_FUNCTION(mcfocMainThread, arg) {
   chRegSetThreadName(DEFS_THD_MCFOC_MAIN_NAME);
 
   mState = MC_OPEN_LOOP;
-  chThdSleepMilliseconds(1500);
-  DBG3("Starting Res measurement\r\n");
-  mcfMeasureResistance();
-  mState = MC_CLOSED_LOOP_CURRENT;
+  // chThdSleepMilliseconds(1500);
+  // DBG3("Starting Res measurement\r\n");
+  // mcfMeasureResistance();
+  // mState = MC_CLOSED_LOOP_CURRENT;
   while (true) 
   {
-    chThdSleepMilliseconds(3000);
-    // mCtrl.w_set = 150;
-    chThdSleepMilliseconds(3000);
-    // mCtrl.w_set = 250;
+    chThdSleepMilliseconds(4000);
+    chThdSleepMilliseconds(4000);
   }
 }
 
@@ -1056,6 +1088,47 @@ static void svm (float* a, float* b, uint16_t* da, uint16_t* db, uint16_t* dc)
   *da = (uint16_t)(pwmHalfPeriod*(ta+0.5));
   *db = (uint16_t)(pwmHalfPeriod*(tb+0.5));
   *dc = (uint16_t)(pwmHalfPeriod*(tc+0.5));        
+}
+/**
+ * @brief      Enables the high side FETs to drive the motor
+ */
+static void lockMotor(void)
+{
+  palSetPad(GPIOE, 14);
+  palSetPadMode(DRV_INH_A_PORT, DRV_INH_A_PIN, PAL_MODE_ALTERNATE(6) |
+                           PAL_STM32_OSPEED_HIGHEST);
+  palSetPadMode(DRV_INH_B_PORT, DRV_INH_B_PIN, PAL_MODE_ALTERNATE(6) |
+                           PAL_STM32_OSPEED_HIGHEST);
+  palSetPadMode(DRV_INH_C_PORT, DRV_INH_C_PIN, PAL_MODE_ALTERNATE(6) |
+                           PAL_STM32_OSPEED_HIGHEST);
+
+  palSetPadMode(DRV_INL_A_PORT, DRV_INL_A_PIN, PAL_MODE_ALTERNATE(4) |
+                           PAL_STM32_OSPEED_HIGHEST);
+  palSetPadMode(DRV_INL_B_PORT, DRV_INL_B_PIN, PAL_MODE_ALTERNATE(6) |
+                           PAL_STM32_OSPEED_HIGHEST);
+  palSetPadMode(DRV_INL_C_PORT, DRV_INL_C_PIN, PAL_MODE_ALTERNATE(6) |
+                           PAL_STM32_OSPEED_HIGHEST);
+}
+/**
+ * @brief      Disables the highside FETs to release the motor in free drive
+ * but enables the low side FETs for current measurement
+ */
+static void releaseMotor(void)
+{
+  palClearPad(GPIOE, 14);
+  palSetPadMode(DRV_INH_A_PORT, DRV_INH_A_PIN, PAL_MODE_OUTPUT_PUSHPULL);
+  palClearPad(DRV_INH_A_PORT, DRV_INH_A_PIN);
+  palSetPadMode(DRV_INH_B_PORT, DRV_INH_B_PIN, PAL_MODE_OUTPUT_PUSHPULL);
+  palClearPad(DRV_INH_B_PORT, DRV_INH_B_PIN);
+  palSetPadMode(DRV_INH_C_PORT, DRV_INH_C_PIN, PAL_MODE_OUTPUT_PUSHPULL);
+  palClearPad(DRV_INH_C_PORT, DRV_INH_C_PIN);
+
+  palSetPadMode(DRV_INL_A_PORT, DRV_INL_A_PIN, PAL_MODE_OUTPUT_PUSHPULL);
+  palClearPad(DRV_INL_A_PORT, DRV_INL_A_PIN);
+  palSetPadMode(DRV_INL_B_PORT, DRV_INL_B_PIN, PAL_MODE_OUTPUT_PUSHPULL);
+  palClearPad(DRV_INL_B_PORT, DRV_INL_B_PIN);
+  palSetPadMode(DRV_INL_C_PORT, DRV_INL_C_PIN, PAL_MODE_OUTPUT_PUSHPULL);
+  palClearPad(DRV_INL_C_PORT, DRV_INL_C_PIN);
 }
 
 /**
@@ -1464,7 +1537,7 @@ CH_IRQ_HANDLER(VectorFC) {
     // mCtrl.vq_set = FOC_FORCED_COMM_VQ;
     if(mState == MC_HALT)
     {
-      TIMER_UPDATE_DUTY(0,0,0);
+      // Do nothing, the motor is released
     }
     else if(mState == MC_OPEN_LOOP)
     {

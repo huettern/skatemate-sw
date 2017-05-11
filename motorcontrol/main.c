@@ -147,7 +147,7 @@ int main(void)
       if(input_val > 1.0) input_val = 1.0;
       if(input_val < -1.0) input_val = -1.0;
       mcfSetCurrentFactor(input_val);
-      // DBG3("input_val=%f\r\n", input_val);
+      DBG3("input_val=%f\r\n", input_val);
       ctr = 0;
     }
     
@@ -202,7 +202,7 @@ int main(void)
 
 void assert_failed(uint8_t* file, uint32_t line) {
   // DBG("Assert fail at File %s Line %d", file, (int)line);
-  while(1);   // hang here (behavior is our your choice)  
+  while(1) palSetPad(GPIOE, GPIOE_LED3_RED);;   // hang here (behavior is our your choice)  
 } 
 
 /** @} */
