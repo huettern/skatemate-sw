@@ -138,6 +138,7 @@ int main(void)
   palSetPadMode(GPIOB, 11, PAL_MODE_ALTERNATE(7)); // used function : USART3_RX
   sdStart(&SD3, NULL);
   // utlmEnable(true);
+  mcfSetCurrentFactor(0.2);
   while (true) 
   {
     chThdSleepMilliseconds(1);
@@ -146,7 +147,7 @@ int main(void)
       input_val = ((float)last_width - PWM_IN_MID)/((float)PWM_IN_HIGH - PWM_IN_MID);
       if(input_val > 1.0) input_val = 1.0;
       if(input_val < -1.0) input_val = -1.0;
-      mcfSetCurrentFactor(input_val);
+      // mcfSetCurrentFactor(input_val);
       ctr = 0;
     }
     

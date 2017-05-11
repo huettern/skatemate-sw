@@ -1,5 +1,5 @@
-/*
- * @file       mc_foc.c
+
+ /** @file       mc_foc.c
  * @brief      FOC implementation
  * @details    
  * @author     Noah Huetter (noahhuetter@gmail.com)
@@ -47,7 +47,7 @@
 /* DEBUG                                                                     */
 /*===========================================================================*/
 // #define DEBUG_ADC
-// #define DEBUG_SVM
+//#define DEBUG_SVM
 //#define DEBUG_OBSERVER
 #define DEBUG_CONTROLLERS
 
@@ -111,11 +111,17 @@
 #define FOC_MOTOR_DEFAULT_LS  35.0e-6 //18.0e-6 // Lumenier: 12e-6
 #define FOC_MOTOR_DEFAULT_RS  20*0.04 // 1.2 // Lumenier: 0.06
 #define FOC_MOTOR_DEFAULT_J   150e-6 // not used
+// vedder measured
+// #define FOC_MOTOR_DEFAULT_PSI 2.7e-3
+// #define FOC_MOTOR_DEFAULT_P   7
+// #define FOC_MOTOR_DEFAULT_LS  12.0e-6
+// #define FOC_MOTOR_DEFAULT_RS  17.0e-3
+// #define FOC_MOTOR_DEFAULT_J   150e-6 // not used
 
 /**
  * FOC defautl parameters
  */
-#define FOC_PARAM_DEFAULT_OBS_GAIN    100e6
+#define FOC_PARAM_DEFAULT_OBS_GAIN    17e6
 #define FOC_PARAM_DEFAULT_OBS_SPEED_KP  2000.0  
 #define FOC_PARAM_DEFAULT_OBS_SPEED_KI  20000.0
 #define FOC_PARAM_DEFAULT_OBS_SPEED_ITERM_MAX  10.0
@@ -127,8 +133,8 @@
 #define FOC_PARAM_DEFAULT_CURR_Q_KP   0.05
 #define FOC_PARAM_DEFAULT_CURR_Q_KI   1.0
 
-#define FOC_PARAM_DEFAULT_ITERM_CEIL     10.0
-#define FOC_PARAM_DEFAULT_ITERM_FLOOR    -10.0
+#define FOC_PARAM_DEFAULT_ITERM_CEIL     100.0
+#define FOC_PARAM_DEFAULT_ITERM_FLOOR    -100.0
 
 #define FOC_PARAM_DEFAULT_SPEED_KP    0.2
 #define FOC_PARAM_DEFAULT_SPEED_KI    1.0
@@ -213,6 +219,7 @@ static BSEMAPHORE_DECL(mIstSem, TRUE);
 #endif
 static volatile uint16_t mADCValueStore[ADC_STORE_DEPTH][8]; // raw converted values
 static volatile uint8_t mStoreADC1, mStoreADC3;
+
 #ifdef DEBUG_OBSERVER
   #define OBS_STORE_DEPTH 1000
 #else
@@ -221,6 +228,7 @@ static volatile uint8_t mStoreADC1, mStoreADC3;
 static volatile float mOBSValueStore[OBS_STORE_DEPTH][6];
 static volatile uint8_t mStoreObserver;
 static uint16_t mObsDebugCounter;
+
 #ifdef DEBUG_CONTROLLERS
   #define CONT_STORE_DEPTH 200
 #else
@@ -230,6 +238,15 @@ static volatile float mContValueStore[CONT_STORE_DEPTH][8];
 static volatile uint8_t mStoreController;
 static uint16_t mControllerDebugCtr;
 static uint8_t mStartStore = 0;
+
+#ifdef DEBUG_SVM
+  #define SVM_STORE_DEPTH 800
+#else
+  #define SVM_STORE_DEPTH 1
+#endif
+static volatile float mSVMValueStore[SVM_STORE_DEPTH][7];
+static volatile uint8_t mStoreSVM;
+static uint16_t mSVMDebugCtr;
 
 static float mForcedCommFreq = 0;
 static float mForcedCommVd = 0;
@@ -245,6 +262,9 @@ static mcState_t mState = MC_HALT;
 static sample_t mSample;
 
 static float mMeasuredResistance = 0;
+
+static float mdtMeasure;
+static float mdt;
 
 /*===========================================================================*/
 /* SHELL settings                                                            */
@@ -358,9 +378,9 @@ static void invclark (float* a, float* b, float* va, float* vb, float* vc);
 static void invpark (float* d, float* q, float* theta, float* a, float* b);
 static float piController(piStruct_t* s, float sample, float* dt);
 
-static void runPositionObserver(float *dt);
+static void runPositionObserver(float dt);
 static void runSpeedObserver (float dt);
-static void runSpeedController (float *dt);
+static void runSpeedController (float dt);
 static void runCurrentController (float *dt);
 static void runOutputs(void);
 static void runOutputsWithoutObserver(float theta);
@@ -471,6 +491,16 @@ void mcfInit(void)
    */
   TIM_CCPreloadControl(TIM1, ENABLE);
   TIM_ARRPreloadConfig(TIM1, ENABLE);
+
+  /******* TIM15 for time measurements *******/  
+  RCC_APB2PeriphClockCmd(RCC_APB2Periph_TIM15, ENABLE);
+  // Time base configuration
+  tim_tbs.TIM_Period = 0xFFFFFFFF;
+  tim_tbs.TIM_Prescaler = 0;
+  tim_tbs.TIM_ClockDivision = 0;
+  tim_tbs.TIM_CounterMode = TIM_CounterMode_Up;
+  TIM_TimeBaseInit(TIM15, &tim_tbs);
+  TIM_Cmd(TIM15, ENABLE);
 
   /******* DMA *******/  
   RCC_AHBPeriphClockCmd(RCC_AHBPeriph_DMA1, ENABLE);
@@ -785,14 +815,13 @@ static THD_FUNCTION(mcfocMainThread, arg) {
   (void)arg;
   chRegSetThreadName(DEFS_THD_MCFOC_MAIN_NAME);
 
-  mState = MC_OPEN_LOOP;
+  // mState = MC_OPEN_LOOP;
   // chThdSleepMilliseconds(1500);
   // DBG3("Starting Res measurement\r\n");
   // mcfMeasureResistance();
   // mState = MC_CLOSED_LOOP_CURRENT;
   while (true) 
   {
-    chThdSleepMilliseconds(4000);
     chThdSleepMilliseconds(4000);
   }
 }
@@ -834,9 +863,16 @@ static THD_FUNCTION(mcfocSecondaryThread, arg)
       }  
     #endif
     #ifdef DEBUG_SVM
-      // svm debug
-      DBG3("%.3f %.3f %d %d %d\r\n", mCtrl.va_set, mCtrl.vb_set, 
-        TIM1->CCR2, TIM1->CCR2, TIM1->CCR1);
+      while(!mStartStore) chThdSleepMilliseconds(10);
+      mStartStore = 0;
+      mStoreSVM = 1;
+      chThdSleepMilliseconds(1);
+      while(mStoreSVM) chThdSleepMilliseconds(1);
+      for(i = 0; i < SVM_STORE_DEPTH; i++)
+      {
+        DBG3("%.3f %.3f %.3f %.3f %.3f %.3f %.3f\r\n", mSVMValueStore[i][0], mSVMValueStore[i][1], 
+          mSVMValueStore[i][2], mSVMValueStore[i][3], mSVMValueStore[i][4], mSVMValueStore[i][5], mSVMValueStore[i][6]);
+      } 
     #endif
     #ifdef DEBUG_OBSERVER
       while(!mStartStore) chThdSleepMilliseconds(10);
@@ -1071,6 +1107,23 @@ static void svm (float* a, float* b, uint16_t* da, uint16_t* db, uint16_t* dc)
     }
   }
 
+#ifdef DEBUG_SVM
+  static uint16_t downSampleCtr = 0;
+  if(mStoreSVM)
+  {
+    // copy to store reg
+    mSVMDebugCtr %= SVM_STORE_DEPTH;
+    mSVMValueStore[mSVMDebugCtr][0] = *a;
+    mSVMValueStore[mSVMDebugCtr][1] = *b;
+    mSVMValueStore[mSVMDebugCtr][2] = ta;
+    mSVMValueStore[mSVMDebugCtr][3] = tb;
+    mSVMValueStore[mSVMDebugCtr][4] = tc;
+    mSVMValueStore[mSVMDebugCtr][5] = mObs.theta;
+    mSVMValueStore[mSVMDebugCtr++][6] = mObs.omega_e;
+    if(mSVMDebugCtr >= SVM_STORE_DEPTH) mStoreSVM = 0;
+  }
+#endif
+
   *da = (uint16_t)(pwmHalfPeriod*(ta+0.5));
   *db = (uint16_t)(pwmHalfPeriod*(tb+0.5));
   *dc = (uint16_t)(pwmHalfPeriod*(tc+0.5));        
@@ -1225,7 +1278,7 @@ static float piController(piStruct_t* s, float sample, float* dt)
  * @param      ib    in: measured i beta
  * @param      dt    in: time delta since last call
  */
-static void runPositionObserver(float *dt)
+static void runPositionObserver(float dt)
 {
   static float pos_error;
   static float xp[2];
@@ -1242,8 +1295,8 @@ static void runPositionObserver(float *dt)
   xp[0] = mObs.y[0] + 0.5f*mFOCParms.obsGain*mObs.eta[0]*pos_error;
   xp[1] = mObs.y[1] + 0.5f*mFOCParms.obsGain*mObs.eta[1]*pos_error;
         
-  mObs.x[0] += xp[0]*(*dt);
-  mObs.x[1] += xp[1]*(*dt);
+  mObs.x[0] += xp[0]*(dt);
+  mObs.x[1] += xp[1]*(dt);
 
   mObs.theta = utilFastAtan2((mObs.x[1] - mMotParms.Ls*(mCtrl.ib_is)), 
     (mObs.x[0] - mMotParms.Ls*(mCtrl.ia_is) ));
@@ -1301,14 +1354,14 @@ static void runSpeedObserver (float dt)
 /**
  * @brief      Runs the speed controller, calculates id_set and iq_set
  */
-static void runSpeedController (float *dt)
+static void runSpeedController (float dt)
 {
   static float err;
 
   err = mCtrl.w_set - mObs.omega_m;
   mCtrl.id_set = 0.0;
   // mCtrl.iq_set = arm_pid_f32(&mCtrl.speedPID, err);
-  mCtrl.iq_set = FOC_PARAPM_DEFAULT_O_CURRENT_MAX * piController(&mpiSpeed, err, dt);
+  mCtrl.iq_set = FOC_PARAPM_DEFAULT_O_CURRENT_MAX * piController(&mpiSpeed, err, &dt);
 }
 /**
  * @brief      Runs the current controller. Calculates vd and vq
@@ -1327,10 +1380,10 @@ static void runCurrentController (float* dt)
 
   mCtrl.vd_set -= mObs.omega_e * mMotParms.Ls * mCtrl.iq_is;
   mCtrl.vq_set += mObs.omega_e * mMotParms.Ls * mCtrl.id_is;
+  mCtrl.vq_set += mObs.omega_e * 15e-3;
 
   mCtrl.vd_set *= 1.0 / ((2.0 / 3.0) * mCtrl.vsupply);
   mCtrl.vq_set *= 1.0 / ((2.0 / 3.0) * mCtrl.vsupply);
-  // mCtrl.vq_set += mObs.omega_e * mMotParms.psi;
 
 #ifdef DEBUG_CONTROLLERS
   static uint16_t downSampleCtr = 0;
@@ -1472,6 +1525,15 @@ CH_IRQ_HANDLER(VectorFC) {
 
   dt = 1.0/((float)FOC_F_SW);
 
+  static uint16_t tmpctr = 0;
+  if(++tmpctr == 20000)
+  {
+    tmpctr = 0;
+    mdtMeasure = TIM15->CNT * (1.0/APB2_CLOCK);
+    mdt = dt;
+  }
+  TIM15->CNT = 0;
+
   // store supply voltage
   UTIL_LP_FAST(mCtrl.vsupply, ADC_VOLT(ADC_CH_SUPPL), FOC_LP_FAST_CONSTANT);
   ADC1->CR |= ADC_CR_ADSTART;
@@ -1481,7 +1543,7 @@ CH_IRQ_HANDLER(VectorFC) {
   mCtrl.ipb_is = ADC_CURR_B();
   mCtrl.ipc_is = -mCtrl.ipa_is -mCtrl.ipb_is;
   clark(&mCtrl.ipa_is, &mCtrl.ipb_is, &mCtrl.ipc_is, &mCtrl.ia_is, &mCtrl.ib_is); //1.727us
-  runPositionObserver(&dt); // 8.765us
+  runPositionObserver(dt); // 8.765us
   runSpeedObserver(dt); // 2.895us
 
   if((mControllerDebugCtr < (CONT_STORE_DEPTH/3)) || (!mStoreController))
@@ -1499,21 +1561,21 @@ CH_IRQ_HANDLER(VectorFC) {
     dtspeed = dt * FOC_SPEED_CONTROLLER_SLOWDOWN;
     // Force a step for the current controller
     #ifdef DEBUG_CONTROLLERS
-    if((mControllerDebugCtr < (CONT_STORE_DEPTH/3)) || (!mStoreController))
+    if((mControllerDebugCtr < (CONT_STORE_DEPTH/4)) || (!mStoreController))
     #endif
     #ifdef DEBUG_OBSERVER
     if((mObsDebugCounter < (OBS_STORE_DEPTH/2)) || (!mStoreObserver))
     #endif
     {
-      mCtrl.w_set = 150;
+      mCtrl.iq_set = 3;
     }
     else
     {
-      mCtrl.w_set = 250;
+      mCtrl.iq_set = 6;
     }
     if(mState == MC_CLOSED_LOOP_SPEED)
     {
-      // runSpeedController(&dtspeed);
+      // runSpeedController(dtspeed);
     }
   }
 
