@@ -48,8 +48,8 @@
 /*===========================================================================*/
 // #define DEBUG_ADC
 // #define DEBUG_SVM
-//#define DEBUG_OBSERVER
-#define DEBUG_CONTROLLERS
+#define DEBUG_OBSERVER
+//#define DEBUG_CONTROLLERS
 
 #define DEBUG_DOWNSAMPLE_FACTOR 10
 
@@ -93,60 +93,14 @@
 #define FOC_FORCED_COMM_FREQ -30.0
 #define FOC_FORCED_COMM_VD 0.0
 #define FOC_FORCED_COMM_VQ 0.07
-/**
- * Maximum and minimum duty cycle
- */
-#define FOC_MIN_DUTY 0.005
-#define FOC_MAX_DUTY 0.95
-/**
- * Minimum allowed RPM in speed control mode
- */
-#define FOC_PARAM_DEFAULT_MIN_RPM 900.0
-/**
- * Max and min current
- */
-#define FOC_PARAM_DEFAULT_CURR_MAX 60.0
-#define FOC_PARAM_DEFAULT_CURR_MIN -60.0
-/**
- * Maximum battery currents
- */
-#define FOC_PARAM_DEFAULT_CURR_IN_MAX 60.0
-#define FOC_PARAM_DEFAULT_CURR_IN_MIN -20.0
-/**
- * PI controller for duty control when decreasing the duty
- */
-#define FOC_PARAM_DEFAULT_DUTY_DOWNRAMP_KP 10.0
-#define FOC_PARAM_DEFAULT_DUTY_DOWNRAMP_KI 200.0
-/**
- * Inject d-axis current below this duty cycle in sensorless more
- */
-#define FOC_DEFAULT_PARAM_D_CURRENT_INJ_DUTY  0.0
-/**
- * Maximum q-axis current factor
- */
-#define FOC_DEFAULT_PARAM_D_CURRENT_INJ_FACTOR  0.0
-/**
- * Openloop RPM (sensorless low speed or when finding index pulse)
- */
-#define FOC_DEFAULT_PARAM_OPENLOOP_RPM 1200.0
-/**
- * Time below min RPM to activate openloop (s)
- */
-#define FOC_DEFAULT_PARAM_OPENLOOP_HYST 0.5
-/**
- * Time to remain in openloop (s)
- */
-#define FOC_DEFAULT_PARAM_OPENLOOP_TIME 0.5
-
-
 
 /**
  * Motor default parameters
  */
-#define FOC_MOTOR_DEFAULT_PSI 15.0e-3//0.00274 //15.0e-3 //0.008
+#define FOC_MOTOR_DEFAULT_PSI 15.0e-3 //0.008
 #define FOC_MOTOR_DEFAULT_P   7
-#define FOC_MOTOR_DEFAULT_LS  18.0e-6//1.248e-5 //35.0e-6 //18.0e-6 // Lumenier: 12e-6
-#define FOC_MOTOR_DEFAULT_RS  1.2//0.01682 //20*0.04 // 1.2 // Lumenier: 0.06
+#define FOC_MOTOR_DEFAULT_LS  35.0e-6 //18.0e-6 // Lumenier: 12e-6
+#define FOC_MOTOR_DEFAULT_RS  20*0.04 // 1.2 // Lumenier: 0.06
 #define FOC_MOTOR_DEFAULT_J   150e-6 // not used
 
 /**
@@ -231,7 +185,7 @@ static mcfController_t mCtrl;
 /**
  * @brief      Observer working set
  */
-static mcfObs_t mObs;
+static volatile mcfObs_t mObs;
 
 static volatile uint16_t mADCValue[8]; // raw converted values
 
@@ -268,23 +222,18 @@ static volatile uint8_t mStoreController;
 static uint16_t mControllerDebugCtr;
 static uint8_t mStartStore = 0;
 
+static float mForcedCommFreq = 0;
+static float mForcedCommVd = 0;
+static float mForcedCommVq = 0;
+
 static piStruct_t mpiSpeed;
 static piStruct_t mpiId;
 static piStruct_t mpiIq;
 static piStruct_t mpiSpeedObs;
 static piStruct_t mpiSpeed;
 
-static mcMode_t mMode = MC_HALT;
-static mcState_t mState = MC_STATE_OFF;
+static mcState_t mState = MC_HALT;
 static sample_t mSample;
-static volatile bool mPhaseOverride = false;
-static volatile float mPhaseNowObserverOverride = 0.0;
-static volatile float mPhaseNowOverride = 0.0;
-static volatile float mTachometer = 0.0;
-static volatile float mTachometerAbs = 0.0;
-static volatile float mLastISRDuration = 0.0;
-
-static volatile bool mPhaseObserverOverride = false;
 
 static float mMeasuredResistance = 0;
 
@@ -300,14 +249,9 @@ static const usbcdcParameterStruct_t mShellcurr_qKi = {"curr_q_ki", &mpiIq.ki};
 static const usbcdcParameterStruct_t mShellSpeedKp = {"speed_kp", &mpiSpeed.kp};
 static const usbcdcParameterStruct_t mShellSpeedKi = {"speed_ki", &mpiSpeed.ki};
 static const usbcdcParameterStruct_t mShellObsGain = {"obs_gain", &mFOCParms.obsGain};
-
 static const usbcdcParameterStruct_t mShellwSet = {"w_set", &mCtrl.w_set};
 static const usbcdcParameterStruct_t mShellIdSet = {"id_set", &mCtrl.id_set};
 static const usbcdcParameterStruct_t mShellIqSet = {"iq_set", &mCtrl.iq_set};
-
-static const usbcdcParameterStruct_t mShellfcf = {"fc_f", &mCtrl.fc_f};
-static const usbcdcParameterStruct_t mShellfcvd = {"fc_vd", &mCtrl.fc_vd};
-static const usbcdcParameterStruct_t mShellfcvq = {"fc_vq", &mCtrl.fc_vq};
 
 static const usbcdcParameterStruct_t mShellL = {"ls", &mMotParms.Ls};
 static const usbcdcParameterStruct_t mShellR = {"rs", &mMotParms.Rs};
@@ -332,9 +276,6 @@ static const usbcdcParameterStruct_t* mShellVars[] =
   &mShellR,
   &mShellPSI,
   &mShellLambda,
-  &mShellfcf,
-  &mShellfcvd,
-  &mShellfcvq,
   NULL
 };
 
@@ -361,10 +302,6 @@ static const usbcdcParameterStruct_t* mShellVars[] =
  * Period, the timer should run on. Calculated by Core clock and FOC_F_SW
  */
 #define FOC_TIM_PERIOD SYSTEM_CORE_CLOCK / FOC_F_SW / 2
-/**
- * Effective deadtime, used for deadtime compensation
- */
-#define FOC_PWM_DEADTIME_US (0.08 + 1.0e6*FOC_PWM_DEADTIME_CYCLES/SYSTEM_CORE_CLOCK)
 /**
  * Duty cycle for TIM1 Channel 4 set to maximum to get a falling edge in the
  * middle of a Gate low output sequence for current and voltage sensing
@@ -401,9 +338,7 @@ static void dataInit(void);
 static void analogCalibrate(void);
 static void drvDCCal(void);
 
-static void svm (float a, float b, uint16_t* da, uint16_t* db, uint16_t* dc);
-static void svm2(float alpha, float beta, uint32_t PWMHalfPeriod,
-    uint32_t* tAout, uint32_t* tBout, uint32_t* tCout);
+static void svm (float* a, float* b, uint16_t* da, uint16_t* db, uint16_t* dc);
 
 static void clark (float* va, float* vb, float* vc, float* a, float* b);
 static void park (float* a, float* b, float* theta, float* d, float* q );
@@ -411,15 +346,13 @@ static void invclark (float* a, float* b, float* va, float* vb, float* vc);
 static void invpark (float* d, float* q, float* theta, float* a, float* b);
 static float piController(piStruct_t* s, float sample, float* dt);
 
-static void runPositionObserver(float dt);
-static void runSpeedObserver (float dt);
+static void runPositionObserver(float *dt);
+static void runSpeedObserver (float *dt);
 static void runSpeedController (float *dt);
-static void runCurrentController (float dt);
+static void runCurrentController (float *dt);
 static void runOutputs(void);
 static void runOutputsWithoutObserver(float theta);
 static void forcedCommutation (void);
-
-static void intHandler(void);
 
 /*===========================================================================*/
 /* Module public functions.                                                  */
@@ -526,16 +459,6 @@ void mcfInit(void)
    */
   TIM_CCPreloadControl(TIM1, ENABLE);
   TIM_ARRPreloadConfig(TIM1, ENABLE);
-
-  /******* TIM12 various time measurements *******/  
-  RCC_APB2PeriphClockCmd(RCC_APB2Periph_TIM15, ENABLE);
-  // Time base configuration
-  tim_tbs.TIM_Period = 0xFFFFFFFF;
-  tim_tbs.TIM_Prescaler = (uint16_t)(((SYSTEM_CORE_CLOCK / 2) / 10000000) - 1);
-  tim_tbs.TIM_ClockDivision = 0;
-  tim_tbs.TIM_CounterMode = TIM_CounterMode_Up;
-  TIM_TimeBaseInit(TIM15, &tim_tbs);
-  TIM_Cmd(TIM15, ENABLE);
 
   /******* DMA *******/  
   RCC_AHBPeriphClockCmd(RCC_AHBPeriph_DMA1, ENABLE);
@@ -768,7 +691,10 @@ void mcfMeasureResistance(void)
   mMeasuredResistance = 0.0;
 
   // Spin up motor in forced commutation
-  mMode = MC_OPEN_LOOP;
+  mForcedCommFreq = FOC_FORCED_COMM_FREQ;
+  mForcedCommVd = FOC_FORCED_COMM_VD;
+  mForcedCommVq = FOC_FORCED_COMM_VQ;
+  mState = MC_OPEN_LOOP;
 
   // Wait for motor to spin
   chThdSleepMilliseconds(3000);
@@ -785,12 +711,12 @@ void mcfMeasureResistance(void)
     if(++ctr > 500) break;
   }
     
-  mMode = MC_HALT;
+  mState = MC_HALT;
   nvicDisableVector(ADC1_2_IRQn);
 
   curr = mSample.curr_sum / FOC_MEASURE_RES_NUM_SAMPLES;
   volt = (mSample.volt_sum / FOC_MEASURE_RES_NUM_SAMPLES) * 
-    sqrtf(mCtrl.fc_vd*mCtrl.fc_vd + mCtrl.fc_vq*mCtrl.fc_vq);
+    sqrtf(mForcedCommVd*mForcedCommVd + mForcedCommVq*mForcedCommVq);
 
   mMeasuredResistance = (volt / curr) * (2.0 / 3.0);
 
@@ -806,68 +732,21 @@ void mcfMeasureResistance(void)
  * @param[in]  <unnamed>  thread pointer
  * @param[in]  <unnamed>  arguments
  */
-static THD_FUNCTION(mcfocMainThread, arg) 
-{
+static THD_FUNCTION(mcfocMainThread, arg) {
   (void)arg;
   chRegSetThreadName(DEFS_THD_MCFOC_MAIN_NAME);
 
-  mMode = MC_OPEN_LOOP;
-  chThdSleepMilliseconds(3000);
-
-  mMode = MC_CONTROL_MODE_CURRENT;
-  mState = MC_STATE_RUNNING;
-
-  // DBG3("Starting Res measurement\r\n");
-  // mcfMeasureResistance();
-  mCtrl.iq_set = 3.0;
-  mMode = MC_CLOSED_LOOP_CURRENT;
-  
+  mState = MC_OPEN_LOOP;
+  chThdSleepMilliseconds(1500);
+  DBG3("Starting Res measurement\r\n");
+  mcfMeasureResistance();
+  mState = MC_CLOSED_LOOP_CURRENT;
   while (true) 
   {
-    float openloop_rpm = utilMap(fabsf(mCtrl.iq_set),
-        0.0, mFOCParms.currMax,
-        0.0, mFOCParms.openloop_rpm);
-
-    const float dt = 0.001;
-    const float min_rads = (openloop_rpm * 2.0 * PI) / 60.0;
-    static float min_rpm_hyst_timer = 0.0;
-    static float min_rpm_timer = 0.0;
-
-    float add_min_speed = 0.0;
-    if (mCtrl.duty_now > 0.0) {
-      add_min_speed = min_rads * dt;
-    } else {
-      add_min_speed = -min_rads * dt;
-    }
-
-    // Output a minimum speed from the observer
-    if (fabsf(mObs.omega_m) < min_rads) {
-      min_rpm_hyst_timer += dt;
-    } else if (min_rpm_hyst_timer > 0.0) {
-      min_rpm_hyst_timer -= dt;
-    }
-
-    // Don't use this in brake mode.
-    if (mMode == MC_CONTROL_MODE_CURRENT_BRAKE || fabsf(mCtrl.duty_now) < 0.001) {
-      min_rpm_hyst_timer = 0.0;
-      mPhaseObserverOverride = false;
-    }
-
-    if (min_rpm_hyst_timer > mFOCParms.openloop_hyst && min_rpm_timer <= 0.0001) {
-      min_rpm_timer = mFOCParms.openloop_time;
-    }
-
-    if (min_rpm_timer > 0.0) {
-      mPhaseNowObserverOverride += add_min_speed;
-      utils_norm_angle_rad((float*)&mPhaseNowObserverOverride);
-      mPhaseObserverOverride = true;
-      min_rpm_timer -= dt;
-      min_rpm_hyst_timer = 0.0;
-    } else {
-      mPhaseNowObserverOverride = mObs.theta;
-      mPhaseObserverOverride = false;
-    }
-    chThdSleepMilliseconds(1);
+    chThdSleepMilliseconds(3000);
+    // mCtrl.w_set = 150;
+    chThdSleepMilliseconds(3000);
+    // mCtrl.w_set = 250;
   }
 }
 
@@ -930,10 +809,8 @@ static THD_FUNCTION(mcfocSecondaryThread, arg)
       while(!mStartStore) chThdSleepMilliseconds(10);
       mStartStore = 0;
       mStoreController = 1;
-      mMode = MC_CLOSED_LOOP_CURRENT;
       chThdSleepMilliseconds(1);
       while(mStoreController) chThdSleepMilliseconds(1);
-      mMode = MC_OPEN_LOOP;
       for(i = 0; i < CONT_STORE_DEPTH; i++)
       {
         DBG3("%.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f\r\n", mContValueStore[i][0], mContValueStore[i][1], 
@@ -969,26 +846,27 @@ static void dataInit(void)
   mFOCParms.iTermCeil = FOC_PARAM_DEFAULT_ITERM_CEIL;
   mFOCParms.iTermFloor = FOC_PARAM_DEFAULT_ITERM_FLOOR;
   mFOCParms.obsSpeed_ceil = FOC_PARAM_DEFAULT_OBS_SPEED_ITERM_MAX;
-  mFOCParms.dutyMax = FOC_MAX_DUTY;
-  mFOCParms.minErpm = FOC_PARAM_DEFAULT_MIN_RPM;
-  mFOCParms.currMin = FOC_PARAM_DEFAULT_CURR_MIN;
-  mFOCParms.currMax = FOC_PARAM_DEFAULT_CURR_MAX;
-  mFOCParms.currInMin = FOC_PARAM_DEFAULT_CURR_IN_MIN;
-  mFOCParms.currInMax = FOC_PARAM_DEFAULT_CURR_IN_MAX;
-  mFOCParms.duty_dowmramp_kp = FOC_PARAM_DEFAULT_DUTY_DOWNRAMP_KP;
-  mFOCParms.duty_dowmramp_ki = FOC_PARAM_DEFAULT_DUTY_DOWNRAMP_KI;
-  mFOCParms.dCurrInjDuty = FOC_DEFAULT_PARAM_D_CURRENT_INJ_DUTY;
-  mFOCParms.dCurrInjFactor = FOC_DEFAULT_PARAM_D_CURRENT_INJ_FACTOR;
-  mFOCParms.openloop_rpm = FOC_DEFAULT_PARAM_OPENLOOP_RPM;
-  mFOCParms.openloop_hyst = FOC_DEFAULT_PARAM_OPENLOOP_HYST;
-  mFOCParms.openloop_time = FOC_DEFAULT_PARAM_OPENLOOP_TIME;
 
-  memset(&mObs, 0, sizeof(mcfObs_t));
-  memset(&mCtrl, 0, sizeof(mcfController_t));
+  mObs.x[0] = 0.0; mObs.x[1] = 0.0;
+  mObs.eta[0] = 0.0; mObs.eta[1] = 0.0;
+  mObs.y[0] = 0.0; mObs.y[1] = 0.0; 
+  mObs.theta = 0.0;
+  mObs.theta_var = 0.0;
+  mObs.omega_m = 0.0;
+  mObs.omega_e = 0.0;
 
-  mCtrl.fc_f = FOC_FORCED_COMM_FREQ;
-  mCtrl.fc_vd = FOC_FORCED_COMM_VD;
-  mCtrl.fc_vq = FOC_FORCED_COMM_VQ;
+  mCtrl.w_set = 0.0;
+  mCtrl.w_is = 0.0;
+  mCtrl.id_set = 0.0;
+  mCtrl.id_is = 0.0;
+  mCtrl.iq_set = 0.0;
+  mCtrl.iq_is = 0.0;
+  mCtrl.vd_set = 0.0;
+  mCtrl.vq_set = 0.0;
+
+  mForcedCommFreq = FOC_FORCED_COMM_FREQ;
+  mForcedCommVd = FOC_FORCED_COMM_VD;
+  mForcedCommVq = FOC_FORCED_COMM_VQ;
 
   // PID Controllers
   mpiId.kp = mFOCParms.curr_d_kp;
@@ -1084,16 +962,16 @@ static void drvDCCal(void)
  * @param      db    out: phase b duty cycle
  * @param      dc    out: phase c duty cycle
  */
-static void svm (float a, float b, uint16_t* da, uint16_t* db, uint16_t* dc)
+static void svm (float* a, float* b, uint16_t* da, uint16_t* db, uint16_t* dc)
 {
+  uint8_t sector;
   float pwmHalfPeriod = TIM1->ARR;
 
   float Ta, Tb, T0;
   float ta, tb, tc;
 
-  float va = a;
-  //TODO: Why?
-  float vb = b*ONE_BY_SQRT_3;
+  float va = *a;
+  float vb = (*b)*ONE_BY_SQRT_3;
 
   if(fabsf(va) >= fabsf(vb))
   {
@@ -1105,6 +983,7 @@ static void svm (float a, float b, uint16_t* da, uint16_t* db, uint16_t* dc)
       if (va >= 0)
       {
         // sector 1
+        sector = 1;
         tc = (T0/2);
         tb = (T0/2+Tb);
         ta = (T0/2+Tb+Ta);
@@ -1112,6 +991,7 @@ static void svm (float a, float b, uint16_t* da, uint16_t* db, uint16_t* dc)
       else
       {
         // sector 3
+        sector = 3;
         ta = (T0/2);
         tc = (T0/2+Ta);
         tb = (T0/2+Tb+Ta);
@@ -1120,6 +1000,7 @@ static void svm (float a, float b, uint16_t* da, uint16_t* db, uint16_t* dc)
     else if (va >= 0)
     {
       // sector 6
+      sector = 6;
       tb = (T0/2);
       tc = (T0/2+Tb);
       ta = (T0/2+Tb+Ta);
@@ -1127,6 +1008,7 @@ static void svm (float a, float b, uint16_t* da, uint16_t* db, uint16_t* dc)
     else
     {
       // sector 4
+      sector = 4;
       ta = (T0/2);
       tb = (T0/2+Ta);
       tc = (T0/2+Tb+Ta);
@@ -1141,6 +1023,7 @@ static void svm (float a, float b, uint16_t* da, uint16_t* db, uint16_t* dc)
     if (vb > 0)
     {
       // sector 2
+      sector = 2;
       tc = (T0/2);
       ta = (T0/2+Ta);
       tb = (T0/2+Tb+Ta);
@@ -1148,6 +1031,7 @@ static void svm (float a, float b, uint16_t* da, uint16_t* db, uint16_t* dc)
     else
     {
       // sector 5
+      sector = 5;
       tb = (T0/2);
       ta = (T0/2+Tb);
       tc = (T0/2+Tb+Ta);
@@ -1157,141 +1041,6 @@ static void svm (float a, float b, uint16_t* da, uint16_t* db, uint16_t* dc)
   *da = (uint16_t)(pwmHalfPeriod*(ta+0.5));
   *db = (uint16_t)(pwmHalfPeriod*(tb+0.5));
   *dc = (uint16_t)(pwmHalfPeriod*(tc+0.5));        
-}
-
-// Magnitude must not be larger than sqrt(3)/2, or 0.866
-static void svm2(float alpha, float beta, uint32_t PWMHalfPeriod,
-    uint32_t* tAout, uint32_t* tBout, uint32_t* tCout) 
-{
-  uint32_t sector;
-
-  if (beta >= 0.0f) 
-  {
-    if (alpha >= 0.0f) 
-    {
-      //quadrant I
-      if (ONE_BY_SQRT_3 * beta > alpha)
-        sector = 2;
-      else
-        sector = 1;
-    } else {
-      //quadrant II
-      if (-ONE_BY_SQRT_3 * beta > alpha)
-        sector = 3;
-      else
-        sector = 2;
-    }
-  } else {
-    if (alpha >= 0.0f) 
-    {
-      //quadrant IV5
-      if (-ONE_BY_SQRT_3 * beta > alpha)
-        sector = 5;
-      else
-        sector = 6;
-    } else {
-      //quadrant III
-      if (ONE_BY_SQRT_3 * beta > alpha)
-        sector = 4;
-      else
-        sector = 5;
-    }
-  }
-
-  // PWM timings
-  uint32_t tA, tB, tC;
-
-  switch (sector) 
-  {
-
-  // sector 1-2
-  case 1: {
-    // Vector on-times
-    uint32_t t1 = (alpha - ONE_BY_SQRT_3 * beta) * PWMHalfPeriod;
-    uint32_t t2 = (TWO_BY_SQRT_3 * beta) * PWMHalfPeriod;
-
-    // PWM timings
-    tA = (PWMHalfPeriod - t1 - t2) / 2;
-    tB = tA + t1;
-    tC = tB + t2;
-
-    break;
-  }
-
-  // sector 2-3
-  case 2: {
-    // Vector on-times
-    uint32_t t2 = (alpha + ONE_BY_SQRT_3 * beta) * PWMHalfPeriod;
-    uint32_t t3 = (-alpha + ONE_BY_SQRT_3 * beta) * PWMHalfPeriod;
-
-    // PWM timings
-    tB = (PWMHalfPeriod - t2 - t3) / 2;
-    tA = tB + t3;
-    tC = tA + t2;
-
-    break;
-  }
-
-  // sector 3-4
-  case 3: {
-    // Vector on-times
-    uint32_t t3 = (TWO_BY_SQRT_3 * beta) * PWMHalfPeriod;
-    uint32_t t4 = (-alpha - ONE_BY_SQRT_3 * beta) * PWMHalfPeriod;
-
-    // PWM timings
-    tB = (PWMHalfPeriod - t3 - t4) / 2;
-    tC = tB + t3;
-    tA = tC + t4;
-
-    break;
-  }
-
-  // sector 4-5
-  case 4: {
-    // Vector on-times
-    uint32_t t4 = (-alpha + ONE_BY_SQRT_3 * beta) * PWMHalfPeriod;
-    uint32_t t5 = (-TWO_BY_SQRT_3 * beta) * PWMHalfPeriod;
-
-    // PWM timings
-    tC = (PWMHalfPeriod - t4 - t5) / 2;
-    tB = tC + t5;
-    tA = tB + t4;
-
-    break;
-  }
-
-  // sector 5-6
-  case 5: {
-    // Vector on-times
-    uint32_t t5 = (-alpha - ONE_BY_SQRT_3 * beta) * PWMHalfPeriod;
-    uint32_t t6 = (alpha - ONE_BY_SQRT_3 * beta) * PWMHalfPeriod;
-
-    // PWM timings
-    tC = (PWMHalfPeriod - t5 - t6) / 2;
-    tA = tC + t5;
-    tB = tA + t6;
-
-    break;
-  }
-
-  // sector 6-1
-  case 6: {
-    // Vector on-times
-    uint32_t t6 = (-TWO_BY_SQRT_3 * beta) * PWMHalfPeriod;
-    uint32_t t1 = (alpha + ONE_BY_SQRT_3 * beta) * PWMHalfPeriod;
-
-    // PWM timings
-    tA = (PWMHalfPeriod - t6 - t1) / 2;
-    tC = tA + t1;
-    tB = tC + t6;
-
-    break;
-  }
-  }
-
-  *tAout = tA;
-  *tBout = tB;
-  *tCout = tC;
 }
 
 /**
@@ -1399,62 +1148,28 @@ static float piController(piStruct_t* s, float sample, float* dt)
  * @param      ib    in: measured i beta
  * @param      dt    in: time delta since last call
  */
-static void runPositionObserver(float dt)
+static void runPositionObserver(float *dt)
 {
-  static float x1 = 0;
-  static float x2 = 0;
-  const float L = (3.0 / 2.0) * mMotParms.Ls;
-  const float R = (3.0 / 2.0) * mMotParms.Rs;
-  const float gamma = mFOCParms.obsGain;
-  const float linkage = mMotParms.psi;
+  static float pos_error;
+  static float xp[2];
 
-  const float Lia = L * mCtrl.ia_is;
-  const float Lib = L * mCtrl.ib_is;
+  mObs.eta[0] = mObs.x[0] - mMotParms.Ls*(mCtrl.ia_is);
+  mObs.eta[1] = mObs.x[1] - mMotParms.Ls*(mCtrl.ib_is);
 
-  float k1 = (linkage * linkage) - ((x1 - Lia) * (x1 - Lia) + (x2 - Lib) * (x2 - Lib));
-  float x1_dot = 0.0;
-  float x2_dot = 0.0;
+  mObs.y[0] = -mMotParms.Rs*(mCtrl.ia_is) + (mCtrl.va_set);
+  mObs.y[1] = -mMotParms.Rs*(mCtrl.ib_is) + (mCtrl.vb_set);
 
-  // TODO: But why???
-  float v_alpha = 0.0;
-  float v_beta = 0.0;
-  x1_dot = -R * mCtrl.ia_is + v_alpha + ((gamma / 2.0) * (x1 - Lia)) * k1;
-  x2_dot = -R * mCtrl.ib_is + v_beta + ((gamma / 2.0) * (x2 - Lib)) * k1;
-  x1 += x1_dot * dt;
-  x2 += x2_dot * dt;
+  pos_error =  mMotParms.psi*mMotParms.psi - 
+    (mObs.eta[0]*mObs.eta[0] + mObs.eta[1]*mObs.eta[1]);
 
-  if (fabsf(x1) > 1e20 || IS_NAN(x1)) 
-  {
-    x1 = 0.0;
-  }
-
-  if (fabsf(x2) > 1e20 || IS_NAN(x2)) 
-  {
-    x2 = 0.0;
-  }
-
-  mObs.theta = utilFastAtan2(x2 - L * mCtrl.ib_is, x1 - L * mCtrl.ia_is);
-
-  // static float pos_error;
-  // static float xp[2];
-
-  // mObs.eta[0] = mObs.x[0] - mMotParms.Ls*(mCtrl.ia_is);
-  // mObs.eta[1] = mObs.x[1] - mMotParms.Ls*(mCtrl.ib_is);
-
-  // mObs.y[0] = -mMotParms.Rs*(mCtrl.ia_is) + (mCtrl.va_set);
-  // mObs.y[1] = -mMotParms.Rs*(mCtrl.ib_is) + (mCtrl.vb_set);
-
-  // pos_error =  mMotParms.psi*mMotParms.psi - 
-  //   (mObs.eta[0]*mObs.eta[0] + mObs.eta[1]*mObs.eta[1]);
-
-  // xp[0] = mObs.y[0] + 0.5f*mFOCParms.obsGain*mObs.eta[0]*pos_error;
-  // xp[1] = mObs.y[1] + 0.5f*mFOCParms.obsGain*mObs.eta[1]*pos_error;
+  xp[0] = mObs.y[0] + 0.5f*mFOCParms.obsGain*mObs.eta[0]*pos_error;
+  xp[1] = mObs.y[1] + 0.5f*mFOCParms.obsGain*mObs.eta[1]*pos_error;
         
-  // mObs.x[0] += xp[0]*(*dt);
-  // mObs.x[1] += xp[1]*(*dt);
+  mObs.x[0] += xp[0]*(*dt);
+  mObs.x[1] += xp[1]*(*dt);
 
-  // mObs.theta = utilFastAtan2((mObs.x[1] - mMotParms.Ls*(mCtrl.ib_is)), 
-  //   (mObs.x[0] - mMotParms.Ls*(mCtrl.ia_is) ));
+  mObs.theta = utilFastAtan2((mObs.x[1] - mMotParms.Ls*(mCtrl.ib_is)), 
+    (mObs.x[0] - mMotParms.Ls*(mCtrl.ia_is) ));
 }
 /**
  * @brief      Estimates the rotor speed using a PLL
@@ -1462,15 +1177,15 @@ static void runPositionObserver(float dt)
  *
  * @param      dt    in: time delta since last call
  */
-static void runSpeedObserver (float dt)
+static void runSpeedObserver (float *dt)
 {
   static float err, wm;
 
   err = mObs.theta - mObs.theta_var;
   utils_norm_angle_rad(&err);
   // mObs.omega_e = arm_pid_f32(&mObs.speedPID, err);
-  mObs.omega_e = piController(&mpiSpeedObs, err, &dt);
-  mObs.theta_var += mObs.omega_e * dt;
+  mObs.omega_e = piController(&mpiSpeedObs, err, dt);
+  mObs.theta_var += mObs.omega_e * (*dt);
   utils_norm_angle_rad(&mObs.theta_var);
   wm = -mObs.omega_e * (60.0 / 2.0 / PI / mMotParms.p);
   UTIL_LP_FAST(mObs.omega_m, wm, 0.0005);
@@ -1511,76 +1226,21 @@ static void runSpeedController (float *dt)
 /**
  * @brief      Runs the current controller. Calculates vd and vq
  */
-static void runCurrentController (float dt)
+static void runCurrentController (float* dt)
 {
   static float d_err, q_err;
-  float c,s,id,iq;
-
-  s = arm_sin_f32(mObs.theta);
-  c = arm_cos_f32(mObs.theta);
-
-  // park(&mCtrl.ia_is, &mCtrl.ib_is, &mObs.theta, &id, &iq);
-  id = c * mCtrl.ia_is + s * mCtrl.ib_is;
-  iq = c * mCtrl.ib_is  - s * mCtrl.ia_is;
-  UTIL_LP_FAST(mCtrl.id_is, id, FOC_LP_FAST_CONSTANT);
-  UTIL_LP_FAST(mCtrl.iq_is, iq, FOC_LP_FAST_CONSTANT);
 
   d_err = mCtrl.id_set - mCtrl.id_is;
   q_err = mCtrl.iq_set - mCtrl.iq_is;
 
-  float Vd = mCtrl.vd_set + d_err * mFOCParms.curr_d_kp;
-  float Vq = mCtrl.vq_set + q_err * mFOCParms.curr_q_kp;
-  mCtrl.vd_set += d_err * (mFOCParms.curr_d_ki * dt);
-  mCtrl.vq_set += q_err * (mFOCParms.curr_q_kp * dt);
+  // mCtrl.vd_set = arm_pid_f32(&mCtrl.idPID, d_err);
+  // mCtrl.vq_set = arm_pid_f32(&mCtrl.iqPID, q_err);
+  mCtrl.vd_set = piController(&mpiId, d_err, dt);
+  mCtrl.vq_set = piController(&mpiIq, q_err, dt);
 
-  mCtrl.mod_d = Vd / ((2.0 / 3.0) * mCtrl.vsupply);
-  mCtrl.mod_q = Vq / ((2.0 / 3.0) * mCtrl.vsupply);
-
-  // Windup protection and saturation
-  utils_saturate_vector_2d(&mCtrl.mod_d, &mCtrl.mod_q,
-      SQRT_3_BY_2 * FOC_MAX_DUTY);
-  utils_saturate_vector_2d(&mCtrl.vd_set, &mCtrl.vq_set,
-      (2.0 / 3.0) * FOC_MAX_DUTY * SQRT_3_BY_2 * mCtrl.vsupply);
-
-  float mod_alpha = c * mCtrl.mod_d - s * mCtrl.mod_q;
-  float mod_beta  = c * mCtrl.mod_q + s * mCtrl.mod_d;
-
-  // Deadtime compensation
-  const float i_alpha_set = c * mCtrl.id_set - s * mCtrl.iq_set;
-  const float i_beta_set = c * mCtrl.iq_set + s * mCtrl.id_set;
-  const float ia_set = i_alpha_set;
-  const float ib_set = -0.5 * i_alpha_set + SQRT_3_BY_2 * i_beta_set;
-  const float ic_set = -0.5 * i_alpha_set - SQRT_3_BY_2 * i_beta_set;
-  const float mod_alpha_set_sgn = (2.0 / 3.0) * SIGN(ia_set) - (1.0 / 3.0) * SIGN(ib_set) - (1.0 / 3.0) * SIGN(ic_set);
-  const float mod_beta_set_sgn = ONE_BY_SQRT_3 * SIGN(ib_set) - ONE_BY_SQRT_3 * SIGN(ic_set);
-  const float mod_comp_fact = FOC_PWM_DEADTIME_US * 1e-6 * FOC_F_SW;
-  const float mod_alpha_comp = mod_alpha_set_sgn * mod_comp_fact;
-  const float mod_beta_comp = mod_beta_set_sgn * mod_comp_fact;
-
-  // Apply compensation here so that 0 duty cyle has no glitches.
-  mCtrl.va_set = (mod_alpha - mod_alpha_comp) * (2.0 / 3.0) * mCtrl.vsupply;
-  mCtrl.vb_set = (mod_beta - mod_beta_comp) * (2.0 / 3.0) * mCtrl.vsupply;
-
-  // uint16_t dutya, dutyb, dutyc;
-  // svm(mod_alpha, mod_beta, &dutya, &dutyb, &dutyc);
-  // TIMER_UPDATE_DUTY(dutyc, dutyb, dutya);
-  // set output
-  uint32_t duty1, duty2, duty3, top;
-  top = TIM1->ARR;
-  svm2(-mod_alpha, -mod_beta, top, &duty1, &duty2, &duty3);
-  TIMER_UPDATE_DUTY(duty1, duty2, duty3);
-
-  // d_err = mCtrl.id_set - mCtrl.id_is;
-  // q_err = mCtrl.iq_set - mCtrl.iq_is;
-
-  // // mCtrl.vd_set = arm_pid_f32(&mCtrl.idPID, d_err);
-  // // mCtrl.vq_set = arm_pid_f32(&mCtrl.iqPID, q_err);
-  // mCtrl.vd_set = piController(&mpiId, d_err, dt);
-  // mCtrl.vq_set = piController(&mpiIq, q_err, dt);
-
-  // // mCtrl.vd_set -= mObs.omega_e * mMotParms.Ls;
-  // // mCtrl.vq_set += mObs.omega_e * mMotParms.Ls;
-  // // mCtrl.vq_set += mObs.omega_e * mMotParms.psi;
+  // mCtrl.vd_set -= mObs.omega_e * mMotParms.Ls;
+  // mCtrl.vq_set += mObs.omega_e * mMotParms.Ls;
+  // mCtrl.vq_set += mObs.omega_e * mMotParms.psi;
 
 #ifdef DEBUG_CONTROLLERS
   static uint16_t downSampleCtr = 0;
@@ -1622,7 +1282,7 @@ static void runOutputs(void)
   invpark(&mCtrl.vd_set, &mCtrl.vq_set, &mObs.theta, &mCtrl.va_set, &mCtrl.vb_set);
   // calculate duties
   utils_saturate_vector_2d(&mCtrl.va_set, &mCtrl.vb_set, SQRT_3_BY_2);
-  svm(mCtrl.va_set, mCtrl.vb_set, &dutya, &dutyb, &dutyc);
+  svm(&mCtrl.va_set, &mCtrl.vb_set, &dutya, &dutyb, &dutyc);
   // set output
   TIMER_UPDATE_DUTY(dutyc, dutyb, dutya);
 }
@@ -1645,7 +1305,7 @@ static void runOutputsWithoutObserver(float theta)
   invpark(&mCtrl.vd_set, &mCtrl.vq_set, &theta, &mCtrl.va_set, &mCtrl.vb_set); // 5.5us
   // calculate duties
   utils_saturate_vector_2d(&mCtrl.va_set, &mCtrl.vb_set, SQRT_3_BY_2); //7.325us
-  svm(mCtrl.va_set, mCtrl.vb_set, &dutya, &dutyb, &dutyc); // 3.738us
+  svm(&mCtrl.va_set, &mCtrl.vb_set, &dutya, &dutyb, &dutyc); // 3.738us
   // set output
   TIMER_UPDATE_DUTY(dutyc, dutyb, dutya); // 0.993us
 }
@@ -1657,9 +1317,9 @@ static void forcedCommutation (void)
   static float t = 0.0;
   static float theta;
 
-  theta = 2*PI*mCtrl.fc_f*(t); //800ns
-  mCtrl.vd_set = mCtrl.fc_vd;
-  mCtrl.vq_set = mCtrl.fc_vq;
+  theta = 2*PI*mForcedCommFreq*(t); //800ns
+  mCtrl.vd_set = mForcedCommVd;
+  mCtrl.vq_set = mForcedCommVq;
   t += ((float)FOC_CURRENT_CONTROLLER_SLOWDOWN / FOC_F_SW);
   runOutputsWithoutObserver(theta);
 }
@@ -1670,8 +1330,7 @@ static void forcedCommutation (void)
 /**
  * @brief      ADC1_2 IRQ handler
  */
-CH_IRQ_HANDLER(Vector88) 
-{
+CH_IRQ_HANDLER(Vector88) {
   static uint16_t ctr = 0;
   static float vd, vq;
   static uint16_t voltmeasSlowDownCtr = 0;
@@ -1679,7 +1338,6 @@ CH_IRQ_HANDLER(Vector88)
   ADC_ClearITPendingBit(ADC1, ADC_IT_EOS);
   ADC1->CR |= ADC_CR_ADSTART;
 
-  UTIL_LP_FAST(mCtrl.vsupply, ADC_VOLT(ADC_CH_SUPPL), FOC_LP_FAST_CONSTANT);
 
   if(++voltmeasSlowDownCtr == FOC_VOLT_MEAS_SLOWDOWN)
   {
@@ -1706,35 +1364,19 @@ CH_IRQ_HANDLER(Vector88)
 /**
  * @brief      ADC3 IRQ handler
  */
-CH_IRQ_HANDLER(VectorFC) 
-{
+CH_IRQ_HANDLER(VectorFC) {
   static uint16_t currSlowDownCtr = 0;
   static uint16_t speedSlowDownCtr = 0;
   static float dt = 0;
   static float id, iq;
   static float dtspeed, dtcurrent;
 
-
   CH_IRQ_PROLOGUE();
-  palSetPad(GPIOE,14);
-  ADC_ClearITPendingBit(ADC3, ADC_IT_EOS);
-  intHandler();
-  ADC3->CR |= ADC_CR_ADSTART;
-  ADC1->CR |= ADC_CR_ADSTART;
-  palClearPad(GPIOE,14);
-  CH_IRQ_EPILOGUE();
-  return;
-
-
-  CH_IRQ_PROLOGUE();
-
-
-
-  palSetPad(GPIOE,14);
+  chSysLockFromISR();
+  // palSetPad(GPIOE,14);
 
   ADC_ClearITPendingBit(ADC3, ADC_IT_EOS);
   ADC3->CR |= ADC_CR_ADSTART;
-  ADC1->CR |= ADC_CR_ADSTART;
 
   dt = 1.0/((float)FOC_F_SW);
 
@@ -1742,12 +1384,11 @@ CH_IRQ_HANDLER(VectorFC)
   mCtrl.ipa_is = ADC_CURR_A();
   mCtrl.ipb_is = ADC_CURR_B();
   mCtrl.ipc_is = -mCtrl.ipa_is -mCtrl.ipb_is;
-  UTIL_LP_FAST(mCtrl.vsupply, ADC_VOLT(ADC_CH_SUPPL), FOC_LP_FAST_CONSTANT);
   clark(&mCtrl.ipa_is, &mCtrl.ipb_is, &mCtrl.ipc_is, &mCtrl.ia_is, &mCtrl.ib_is); //1.727us
-  runPositionObserver(dt); // 8.765us
-  runSpeedObserver(dt); // 2.895us
-#ifdef DEBUG_CONTROLLERS
-  if((mControllerDebugCtr < ((uint16_t)(CONT_STORE_DEPTH/2))) || (!mStoreController))
+  runPositionObserver(&dt); // 8.765us
+  runSpeedObserver(&dt); // 2.895us
+
+  if((mControllerDebugCtr < (CONT_STORE_DEPTH/3)) || (!mStoreController))
   {
     // mCtrl.iq_set = 2.0;
   }
@@ -1755,18 +1396,6 @@ CH_IRQ_HANDLER(VectorFC)
   {
     // mCtrl.iq_set = 4.0;
   }
-#endif
-#ifdef DEBUG_OBSERVER
-  if((mObsDebugCounter < ((uint16_t)(OBS_STORE_DEPTH/2))) || (!mStoreObserver))
-  {
-    // mMode = MC_OPEN_LOOP;
-  }
-  else
-  {
-    // mMode = MC_CLOSED_LOOP_CURRENT;
-  }
-#endif
-
 
   if(++speedSlowDownCtr == FOC_SPEED_CONTROLLER_SLOWDOWN)
   {
@@ -1786,7 +1415,7 @@ CH_IRQ_HANDLER(VectorFC)
     {
       mCtrl.w_set = 250;
     }
-    if(mMode == MC_CLOSED_LOOP_SPEED)
+    if(mState == MC_CLOSED_LOOP_SPEED)
     {
       // runSpeedController(&dtspeed);
     }
@@ -1801,23 +1430,24 @@ CH_IRQ_HANDLER(VectorFC)
     // chBSemSignalI(&mIstSem);
     // chSysUnlockFromISR(); 
 
-    // park(&mCtrl.ia_is, &mCtrl.ib_is, &mObs.theta, &id, &iq);
-    // UTIL_LP_FAST(mCtrl.id_is, id, FOC_LP_FAST_CONSTANT);
-    // UTIL_LP_FAST(mCtrl.iq_is, iq, FOC_LP_FAST_CONSTANT);
+    park(&mCtrl.ia_is, &mCtrl.ib_is, &mObs.theta, &id, &iq);
+    UTIL_LP_FAST(mCtrl.id_is, id, FOC_LP_FAST_CONSTANT);
+    UTIL_LP_FAST(mCtrl.iq_is, iq, FOC_LP_FAST_CONSTANT);
 
+    runCurrentController(&dtcurrent);
     // mCtrl.vd_set = FOC_FORCED_COMM_VD; // override
     // mCtrl.vq_set = FOC_FORCED_COMM_VQ;
-    if(mMode == MC_HALT)
+    if(mState == MC_HALT)
     {
       TIMER_UPDATE_DUTY(0,0,0);
     }
-    else if(mMode == MC_OPEN_LOOP)
+    else if(mState == MC_OPEN_LOOP)
     {
       forcedCommutation();
     }
-    else if(mMode == MC_CLOSED_LOOP_CURRENT)
+    else
     {
-      runCurrentController(dtcurrent);
+      runOutputs(); 
     }
 
     mSample.curr_sum += sqrtf(mCtrl.id_is * mCtrl.id_is + mCtrl.iq_is * mCtrl.iq_is);
@@ -1839,230 +1469,11 @@ CH_IRQ_HANDLER(VectorFC)
 #endif
 
 
-  palClearPad(GPIOE,14);
+  // palClearPad(GPIOE,14);
   chSysUnlockFromISR(); 
   CH_IRQ_EPILOGUE();
 }
 
-/**
- * @brief      ADC Interrupt handler
- */
-static void intHandler(void)
-{
-  TIM15->CNT = 0;
-
-  const float dt = 1.0 / (FOC_F_SW / 2.0);
-  float ia = ADC_CURR_A();
-  float ib = ADC_CURR_B();
-  mCtrl.vsupply = ADC_VOLT(ADC_CH_SUPPL);
-
-  float enc_ang = 0;
-
-  static float phase_before = 0.0;
-  const float phase_diff = angle_difference(mCtrl.phase, phase_before);
-  phase_before = mCtrl.phase;
-
-  if (mState == MC_STATE_RUNNING) {
-    // Clarke transform assuming balanced currents
-    mCtrl.ia_is = ia;
-    mCtrl.ib_is = ONE_BY_SQRT_3 * ia + TWO_BY_SQRT_3 * ib;
-
-    const float duty_abs = fabsf(mCtrl.duty_now);
-    float id_set_tmp = mCtrl.id_set;
-    float iq_set_tmp = mCtrl.iq_set;
-    mCtrl.max_duty = mFOCParms.dutyMax;
-
-    static float duty_filtered = 0.0;
-    UTIL_LP_FAST(duty_filtered, mCtrl.duty_now, 0.1);
-    truncate_number(&duty_filtered, -1.0, 1.0);
-
-    float duty_set = mCtrl.duty_set;
-    bool control_duty = mMode == MC_CONTROL_MODE_DUTY;
-
-    // When the filtered duty cycle in sensorless mode becomes low in brake mode, the
-    // observer has lost tracking. Use duty cycle control with the lowest duty cycle
-    // to get as smooth braking as possible.
-    if (mMode == MC_CONTROL_MODE_CURRENT_BRAKE
-//        && (m_conf->foc_sensor_mode != FOC_SENSOR_MODE_ENCODER) // Don't use this with encoderss
-        && fabsf(duty_filtered) < 0.03) {
-      control_duty = true;
-      duty_set = 0.0;
-    }
-
-    // Brake when set ERPM is below min ERPM
-    if (mMode == MC_CONTROL_MODE_SPEED &&
-        fabsf(mCtrl.w_set) < mFOCParms.minErpm) {
-      control_duty = true;
-      duty_set = 0.0;
-    }
-
-    if (control_duty) {
-      // Duty cycle control
-      static float duty_i_term = 0.0;
-      if (fabsf(duty_set) < (duty_abs - 0.05) ||
-          (SIGN(mCtrl.vq_is) * mCtrl.iq_is) < mFOCParms.currMin) {
-        // Truncating the duty cycle here would be dangerous, so run a PID controller.
-
-        // Compensation for supply voltage variations
-        float scale = 1.0 / mCtrl.vsupply;
-
-        // Compute error
-        float error = duty_set - mCtrl.duty_now;
-
-        // Compute parameters
-        float p_term = error * mFOCParms.duty_dowmramp_kp * scale;
-        duty_i_term += error * (mFOCParms.duty_dowmramp_ki * dt) * scale;
-
-        // I-term wind-up protection
-        truncate_number(&duty_i_term, -1.0, 1.0);
-
-        // Calculate output
-        float output = p_term + duty_i_term;
-        truncate_number(&output, -1.0, 1.0);
-        iq_set_tmp = output * mFOCParms.currMax;
-      } else {
-        // If the duty cycle is less than or equal to the set duty cycle just limit
-        // the modulation and use the maximum allowed current.
-        duty_i_term = 0.0;
-        mFOCParms.dutyMax = duty_set;
-        if (duty_set > 0.0) {
-          iq_set_tmp = mFOCParms.currMax;
-        } else {
-          iq_set_tmp = -mFOCParms.currMax;
-        }
-      }
-    } else if (mMode == MC_CONTROL_MODE_CURRENT_BRAKE) {
-      // Braking
-      iq_set_tmp = fabsf(iq_set_tmp);
-
-      if (phase_diff > 0.0) {
-        iq_set_tmp = -iq_set_tmp;
-      } else if (phase_diff == 0.0) {
-        iq_set_tmp = 0.0;
-      }
-    }
-
-    // Run observer
-    if (!mPhaseOverride) {
-      runPositionObserver(dt);
-    }
-
-    if (mPhaseObserverOverride) {
-      mCtrl.phase = mPhaseNowObserverOverride;
-    } else {
-      mCtrl.phase = mObs.theta;
-    }
-
-    // Inject D axis current at low speed to make the observer track
-    // better. This does not seem to be necessary with dead time
-    // compensation.
-    // Note: this is done at high rate prevent noise.
-    if (!mPhaseOverride) {
-      if (duty_abs < mFOCParms.dCurrInjDuty) {
-        id_set_tmp = utilMap(duty_abs, 0.0, mFOCParms.dCurrInjDuty,
-            fabsf(mCtrl.iq_set) * mFOCParms.dCurrInjFactor, 0.0);
-      } else {
-        id_set_tmp = 0.0;
-      }
-    }
-
-    if (mPhaseOverride) {
-      mCtrl.phase = mPhaseNowOverride;
-    }
-
-    // Apply current limits
-    const float mod_q = mCtrl.mod_q;
-    truncate_number(&iq_set_tmp, mFOCParms.currMin, mFOCParms.currMax);
-    utils_saturate_vector_2d(&id_set_tmp, &iq_set_tmp, mFOCParms.currMax);
-    if (mod_q > 0.001) {
-      truncate_number(&iq_set_tmp, mFOCParms.currInMin / mod_q, mFOCParms.currInMax / mod_q);
-    } else if (mod_q < -0.001) {
-      truncate_number(&iq_set_tmp, mFOCParms.currInMax / mod_q, mFOCParms.currInMin / mod_q);
-    }
-
-    mCtrl.id_set = id_set_tmp;
-    mCtrl.iq_set = iq_set_tmp;
-
-    runCurrentController(dt);
-  } else {
-    // Track back emf
-    float Va = ADC_VOLT(ADC_CH_PH_A);
-    float Vb = ADC_VOLT(ADC_CH_PH_B);
-    float Vc = ADC_VOLT(ADC_CH_PH_C);
-
-    // Clarke transform
-    mCtrl.va_is = (2.0 / 3.0) * Va - (1.0 / 3.0) * Vb - (1.0 / 3.0) * Vc;
-    mCtrl.vb_is = ONE_BY_SQRT_3 * Vb - ONE_BY_SQRT_3 * Vc;
-
-    // Park transform
-    float c,s;
-    s = arm_sin_f32(mCtrl.phase);
-    c = arm_cos_f32(mCtrl.phase);
-    mCtrl.vd_is = c * mCtrl.va_is + s * mCtrl.vb_is;
-    mCtrl.vq_is = c * mCtrl.vb_is  - s * mCtrl.va_is;
-
-    // Update corresponding modulation
-    mCtrl.mod_d = mCtrl.vd_is / ((2.0 / 3.0) * mCtrl.vsupply);
-    mCtrl.mod_q = mCtrl.vq_is / ((2.0 / 3.0) * mCtrl.vsupply);
-
-    // The current is 0 when the motor is undriven
-    mCtrl.ia_is = 0.0;
-    mCtrl.ib_is = 0.0;
-    mCtrl.id_is = 0.0;
-    mCtrl.id_is = 0.0;
-    mCtrl.id_is_filter = 0.0;
-    mCtrl.id_is_filter = 0.0;
-    mCtrl.isupply = 0.0;
-    mCtrl.i_abs = 0.0;
-    mCtrl.i_abs_filter = 0.0;
-
-    // Run observer
-    runPositionObserver(dt);
-    mCtrl.phase = mObs.theta;
-  }
-
-  // Calculate duty cycle
-  mCtrl.duty_now = SIGN(mCtrl.vq_is) *
-      sqrtf(mCtrl.mod_d * mCtrl.mod_d +
-          mCtrl.mod_q * mCtrl.mod_q) / SQRT_3_BY_2;
-
-  // Run PLL for speed estimation
-  runSpeedObserver(dt);
-
-  // Update tachometer
-  static float phase_last = 0.0;
-  int diff = (int)((angle_difference_rad(mCtrl.phase, phase_last) * (180.0 / PI)) / 60.0);
-  if (diff != 0) {
-    mTachometer += diff;
-    mTachometerAbs += fabsf(diff);
-    phase_last = mCtrl.phase;
-  }
-
-  // // Track position control angle
-  // // TODO: Have another look at this.
-  // float angle_now = 0.0;
-  // angle_now = mCtrl.phase * (180.0 / PI); 
-
-  // if (m_conf->p_pid_ang_div > 0.98 && m_conf->p_pid_ang_div < 1.02) {
-  //   m_pos_pid_now = angle_now;
-  // } else {
-  //   static float angle_last = 0.0;
-  //   float diff_f = utils_angle_difference(angle_now, angle_last);
-  //   angle_last = angle_now;
-  //   m_pos_pid_now += diff_f / m_conf->p_pid_ang_div;
-  //   utils_norm_angle((float*)&m_pos_pid_now);
-  // }
-
-  // // Run position control
-  // if (m_state == MC_STATE_RUNNING) {
-  //   run_pid_control_pos(m_pos_pid_now, m_pos_pid_set, dt);
-  // }
-
-  // // MCIF handler
-  // mc_interface_mc_timer_isr();
-
-  mLastISRDuration = (float) TIM15->CNT / 10000000.0;
-}
 
 
 /** @} */

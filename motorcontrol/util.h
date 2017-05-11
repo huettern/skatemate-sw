@@ -20,8 +20,6 @@
 #define SQRT_3_BY_2   (0.8660254f)
 #define SQRT_3        (1.7320508f)
 // #define PI (3.1415927f) // defined in arm_math
-#define IS_NAN(x)       ((x) != (x))
-#define SIGN(x)         ((x<0)?-1:1)
 
 /*===========================================================================*/
 /* Macros 	                                                                 */
@@ -63,10 +61,6 @@ bool utils_saturate_vector_2d(float *x, float *y, float max);
 void utils_norm_angle_rad(float *angle);
 void sincos_fast(float angle, float *sin, float *cos);
 float stof(const char* s);
-float angle_difference(float angle1, float angle2);
-float angle_difference_rad(float angle1, float angle2);
-int truncate_number(float *number, float min, float max);
-float utilMap(float x, float in_min, float in_max, float out_min, float out_max);
 
 
 /** @} */
