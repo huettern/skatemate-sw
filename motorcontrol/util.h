@@ -62,5 +62,4 @@ void utils_norm_angle_rad(float *angle);
 void sincos_fast(float angle, float *sin, float *cos);
 float stof(const char* s);
 
-
 /** @} */

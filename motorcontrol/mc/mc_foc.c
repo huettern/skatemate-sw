@@ -48,8 +48,8 @@
 /*===========================================================================*/
 // #define DEBUG_ADC
 // #define DEBUG_SVM
-#define DEBUG_OBSERVER
-//#define DEBUG_CONTROLLERS
+//#define DEBUG_OBSERVER
+#define DEBUG_CONTROLLERS
 
 #define DEBUG_DOWNSAMPLE_FACTOR 10
 
@@ -93,6 +93,10 @@
 #define FOC_FORCED_COMM_FREQ -30.0
 #define FOC_FORCED_COMM_VD 0.0
 #define FOC_FORCED_COMM_VQ 0.07
+/**
+ * Maximum current
+ */
+#define FOC_PARAM_DEFAULT_CURR_MAX 10.0
 
 /**
  * Motor default parameters
@@ -347,7 +351,7 @@ static void invpark (float* d, float* q, float* theta, float* a, float* b);
 static float piController(piStruct_t* s, float sample, float* dt);
 
 static void runPositionObserver(float *dt);
-static void runSpeedObserver (float *dt);
+static void runSpeedObserver (float dt);
 static void runSpeedController (float *dt);
 static void runCurrentController (float *dt);
 static void runOutputs(void);
@@ -653,6 +657,17 @@ void mcfSetDuty (uint16_t a, uint16_t b, uint16_t c)
 {
   TIMER_UPDATE_DUTY(c,b,a);
   DBG("max duty: %d\r\n",FOC_TIM_PERIOD);
+}
+
+/**
+ * @brief      Set the current from min current to max current
+ *
+ * @param[in]  in    from -1.0 to 1.0
+ */
+void mcfSetCurrentFactor(float in)
+{
+  mState = MC_CLOSED_LOOP_CURRENT;
+  mCtrl.iq_set = in * FOC_PARAM_DEFAULT_CURR_MAX;
 }
 
 /**
@@ -1177,18 +1192,28 @@ static void runPositionObserver(float *dt)
  *
  * @param      dt    in: time delta since last call
  */
-static void runSpeedObserver (float *dt)
+static void runSpeedObserver (float dt)
 {
   static float err, wm;
 
-  err = mObs.theta - mObs.theta_var;
-  utils_norm_angle_rad(&err);
-  // mObs.omega_e = arm_pid_f32(&mObs.speedPID, err);
-  mObs.omega_e = piController(&mpiSpeedObs, err, dt);
-  mObs.theta_var += mObs.omega_e * (*dt);
+  float delta_theta = mObs.theta - mObs.theta_var;
+  utils_norm_angle_rad(&delta_theta);
+  mObs.theta_var += (mObs.omega_e + mFOCParms.obsSpeed_kp * delta_theta) * dt;
   utils_norm_angle_rad(&mObs.theta_var);
+  mObs.omega_e += mFOCParms.obsSpeed_ki * delta_theta * dt;
+
   wm = -mObs.omega_e * (60.0 / 2.0 / PI / mMotParms.p);
-  UTIL_LP_FAST(mObs.omega_m, wm, 0.0005);
+  // UTIL_LP_FAST(mObs.omega_m, wm, 0.0005);
+  mObs.omega_m = wm;
+
+  // err = mObs.theta - mObs.theta_var;
+  // utils_norm_angle_rad(&err);
+  // // mObs.omega_e = arm_pid_f32(&mObs.speedPID, err);
+  // mObs.omega_e = piController(&mpiSpeedObs, err, dt);
+  // mObs.theta_var += mObs.omega_e * (*dt);
+  // utils_norm_angle_rad(&mObs.theta_var);
+  // wm = -mObs.omega_e * (60.0 / 2.0 / PI / mMotParms.p);
+  // UTIL_LP_FAST(mObs.omega_m, wm, 0.0005);
 
 #ifdef DEBUG_OBSERVER
   static uint16_t downSampleCtr = 0;
@@ -1386,7 +1411,7 @@ CH_IRQ_HANDLER(VectorFC) {
   mCtrl.ipc_is = -mCtrl.ipa_is -mCtrl.ipb_is;
   clark(&mCtrl.ipa_is, &mCtrl.ipb_is, &mCtrl.ipc_is, &mCtrl.ia_is, &mCtrl.ib_is); //1.727us
   runPositionObserver(&dt); // 8.765us
-  runSpeedObserver(&dt); // 2.895us
+  runSpeedObserver(dt); // 2.895us
 
   if((mControllerDebugCtr < (CONT_STORE_DEPTH/3)) || (!mStoreController))
   {

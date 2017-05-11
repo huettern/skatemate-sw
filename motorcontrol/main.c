@@ -46,6 +46,21 @@
 uint8_t ydata[] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10};
 uint8_t xdata[] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10};
 
+static void icuwidthcb(ICUDriver *icup);
+static void icuperiodcb(ICUDriver *icup);
+icucnt_t last_width, last_period;
+#define PWM_IN_LOW 763
+#define PWM_IN_MID 1594
+#define PWM_IN_HIGH 2100
+static ICUConfig icucfg = {
+  ICU_INPUT_ACTIVE_HIGH,
+  1000000,                                    /* 10kHz ICU clock frequency.   */
+  icuwidthcb,
+  icuperiodcb,
+  NULL,
+  ICU_CHANNEL_2,
+  0
+};
 
 /*===========================================================================*/
 /* prototypes                                                                */
@@ -58,6 +73,17 @@ uint8_t xdata[] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10};
 /*===========================================================================*/
 /* callbacks                                                                 */
 /*===========================================================================*/
+static void icuwidthcb(ICUDriver *icup) {
+
+  palSetPad(GPIOE, GPIOE_LED9_BLUE);
+  last_width = icuGetWidthX(icup);
+}
+
+static void icuperiodcb(ICUDriver *icup) {
+
+  palClearPad(GPIOE, GPIOE_LED9_BLUE);
+  last_period = icuGetPeriodX(icup);
+}
 
 /*===========================================================================*/
 /* Module public functions.                                                  */
@@ -67,9 +93,7 @@ uint8_t xdata[] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10};
  */
 int main(void) 
 {
-  static int i;
-  static uint64_t xda=0;
-  static float yda;
+  static float input_val;
 
   uint32_t op1,op2,res;
 
@@ -84,6 +108,14 @@ int main(void)
   */
   usbcdcInit();
 
+  /**
+   * ICU for PWM capture
+   */
+  icuStart(&ICUD3, &icucfg);
+  palSetPadMode(GPIOB, 5, PAL_MODE_ALTERNATE(2));
+  icuStartCapture(&ICUD3);
+  icuEnableNotifications(&ICUD3);
+
   /*
    * Shell manager initialization.
    */
@@ -97,10 +129,6 @@ int main(void)
    */
   chRegSetThreadName(DEFS_THD_IDLE_NAME);
 
-  op1 = 10;
-  op2 = 20;
-  res = __UADD8(op1,op2);
-
   // wait 10sec
   uint16_t ctr = 0;
   shellInit();
@@ -113,12 +141,16 @@ int main(void)
   while (true) 
   {
     chThdSleepMilliseconds(1);
-    if(++ctr > 1000)
+    if(++ctr > 100)
     {
-      
-      mcfDumpData();
+      input_val = ((float)last_width - PWM_IN_MID)/((float)PWM_IN_HIGH - PWM_IN_MID);
+      if(input_val > 1.0) input_val = 1.0;
+      if(input_val < -1.0) input_val = -1.0;
+      mcfSetCurrentFactor(input_val);
+      // DBG3("input_val=%f\r\n", input_val);
       ctr = 0;
     }
+    
     
     usbcdcHandleShell();
   }
