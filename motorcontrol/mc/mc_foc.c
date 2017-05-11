@@ -135,7 +135,7 @@
 
 #define FOC_LP_FAST_CONSTANT 0.1
 
-#define FOC_PARAPM_DEFAULT_O_CURRENT_MAX 1.0
+#define FOC_PARAPM_DEFAULT_O_CURRENT_MAX 5.0
 /**
  * @brief      Resistor divider for voltage measurements
  */
@@ -1094,7 +1094,7 @@ static void svm (float* a, float* b, uint16_t* da, uint16_t* db, uint16_t* dc)
  */
 static void lockMotor(void)
 {
-  palSetPad(GPIOE, 14);
+  palSetPad(GPIOE, GPIOE_LED7_GREEN);
   palSetPadMode(DRV_INH_A_PORT, DRV_INH_A_PIN, PAL_MODE_ALTERNATE(6) |
                            PAL_STM32_OSPEED_HIGHEST);
   palSetPadMode(DRV_INH_B_PORT, DRV_INH_B_PIN, PAL_MODE_ALTERNATE(6) |
@@ -1115,7 +1115,7 @@ static void lockMotor(void)
  */
 static void releaseMotor(void)
 {
-  palClearPad(GPIOE, 14);
+  palClearPad(GPIOE, GPIOE_LED7_GREEN);
   palSetPadMode(DRV_INH_A_PORT, DRV_INH_A_PIN, PAL_MODE_OUTPUT_PUSHPULL);
   palClearPad(DRV_INH_A_PORT, DRV_INH_A_PIN);
   palSetPadMode(DRV_INH_B_PORT, DRV_INH_B_PIN, PAL_MODE_OUTPUT_PUSHPULL);
@@ -1471,7 +1471,7 @@ CH_IRQ_HANDLER(VectorFC) {
 
   CH_IRQ_PROLOGUE();
   chSysLockFromISR();
-  // palSetPad(GPIOE,14);
+  palSetPad(GPIOE,14);
 
   ADC_ClearITPendingBit(ADC3, ADC_IT_EOS);
   ADC3->CR |= ADC_CR_ADSTART;
@@ -1567,7 +1567,7 @@ CH_IRQ_HANDLER(VectorFC) {
 #endif
 
 
-  // palClearPad(GPIOE,14);
+  palClearPad(GPIOE,14);
   chSysUnlockFromISR(); 
   CH_IRQ_EPILOGUE();
 }
