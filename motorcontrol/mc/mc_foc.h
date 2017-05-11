@@ -90,6 +90,7 @@ typedef struct
   float vpa_is;
   float vpb_is;
   float vpc_is;
+  float vsupply;
 } mcfController_t;
 
 typedef enum {

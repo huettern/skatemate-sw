@@ -147,7 +147,6 @@ int main(void)
       if(input_val > 1.0) input_val = 1.0;
       if(input_val < -1.0) input_val = -1.0;
       mcfSetCurrentFactor(input_val);
-      DBG3("input_val=%f\r\n", input_val);
       ctr = 0;
     }
     

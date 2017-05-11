@@ -121,11 +121,11 @@
 #define FOC_PARAM_DEFAULT_OBS_SPEED_ITERM_MAX  10.0
 #define FOC_PARAM_DEFAULT_OBS_SPEED_ITERM_MIN  -10.0
 
-#define FOC_PARAM_DEFAULT_CURR_D_KP   0.03
-#define FOC_PARAM_DEFAULT_CURR_D_KI   0.0
+#define FOC_PARAM_DEFAULT_CURR_D_KP   0.08
+#define FOC_PARAM_DEFAULT_CURR_D_KI   10.0
 
-#define FOC_PARAM_DEFAULT_CURR_Q_KP   0.03
-#define FOC_PARAM_DEFAULT_CURR_Q_KI   0.0
+#define FOC_PARAM_DEFAULT_CURR_Q_KP   0.05
+#define FOC_PARAM_DEFAULT_CURR_Q_KI   1.0
 
 #define FOC_PARAM_DEFAULT_ITERM_CEIL     10.0
 #define FOC_PARAM_DEFAULT_ITERM_FLOOR    -10.0
@@ -135,7 +135,7 @@
 
 #define FOC_LP_FAST_CONSTANT 0.1
 
-#define FOC_PARAPM_DEFAULT_O_CURRENT_MAX 5.0
+#define FOC_PARAPM_DEFAULT_O_CURRENT_MAX 50.0
 /**
  * @brief      Resistor divider for voltage measurements
  */
@@ -894,22 +894,8 @@ static void dataInit(void)
   mFOCParms.iTermFloor = FOC_PARAM_DEFAULT_ITERM_FLOOR;
   mFOCParms.obsSpeed_ceil = FOC_PARAM_DEFAULT_OBS_SPEED_ITERM_MAX;
 
-  mObs.x[0] = 0.0; mObs.x[1] = 0.0;
-  mObs.eta[0] = 0.0; mObs.eta[1] = 0.0;
-  mObs.y[0] = 0.0; mObs.y[1] = 0.0; 
-  mObs.theta = 0.0;
-  mObs.theta_var = 0.0;
-  mObs.omega_m = 0.0;
-  mObs.omega_e = 0.0;
-
-  mCtrl.w_set = 0.0;
-  mCtrl.w_is = 0.0;
-  mCtrl.id_set = 0.0;
-  mCtrl.id_is = 0.0;
-  mCtrl.iq_set = 0.0;
-  mCtrl.iq_is = 0.0;
-  mCtrl.vd_set = 0.0;
-  mCtrl.vq_set = 0.0;
+  memset(&mObs, 0, sizeof(mcfObs_t));
+  memset(&mCtrl, 0, sizeof(mcfController_t));
 
   mForcedCommFreq = FOC_FORCED_COMM_FREQ;
   mForcedCommVd = FOC_FORCED_COMM_VD;
@@ -1089,11 +1075,14 @@ static void svm (float* a, float* b, uint16_t* da, uint16_t* db, uint16_t* dc)
   *db = (uint16_t)(pwmHalfPeriod*(tb+0.5));
   *dc = (uint16_t)(pwmHalfPeriod*(tc+0.5));        
 }
+
 /**
  * @brief      Enables the high side FETs to drive the motor
  */
 static void lockMotor(void)
 {
+  mpiId.istate = 0.0;
+  mpiIq.istate = 0.0;
   palSetPad(GPIOE, GPIOE_LED7_GREEN);
   palSetPadMode(DRV_INH_A_PORT, DRV_INH_A_PIN, PAL_MODE_ALTERNATE(6) |
                            PAL_STM32_OSPEED_HIGHEST);
@@ -1275,7 +1264,7 @@ static void runSpeedObserver (float dt)
   utils_norm_angle_rad(&mObs.theta_var);
   mObs.omega_e += mFOCParms.obsSpeed_ki * delta_theta * dt;
 
-  wm = -mObs.omega_e * (60.0 / 2.0 / PI / mMotParms.p);
+  wm = mObs.omega_e * (60.0 / 2.0 / PI / mMotParms.p);
   // UTIL_LP_FAST(mObs.omega_m, wm, 0.0005);
   mObs.omega_m = wm;
 
@@ -1336,8 +1325,11 @@ static void runCurrentController (float* dt)
   mCtrl.vd_set = piController(&mpiId, d_err, dt);
   mCtrl.vq_set = piController(&mpiIq, q_err, dt);
 
-  // mCtrl.vd_set -= mObs.omega_e * mMotParms.Ls;
-  // mCtrl.vq_set += mObs.omega_e * mMotParms.Ls;
+  mCtrl.vd_set -= mObs.omega_e * mMotParms.Ls * mCtrl.iq_is;
+  mCtrl.vq_set += mObs.omega_e * mMotParms.Ls * mCtrl.id_is;
+
+  mCtrl.vd_set *= 1.0 / ((2.0 / 3.0) * mCtrl.vsupply);
+  mCtrl.vq_set *= 1.0 / ((2.0 / 3.0) * mCtrl.vsupply);
   // mCtrl.vq_set += mObs.omega_e * mMotParms.psi;
 
 #ifdef DEBUG_CONTROLLERS
@@ -1381,6 +1373,9 @@ static void runOutputs(void)
   // calculate duties
   utils_saturate_vector_2d(&mCtrl.va_set, &mCtrl.vb_set, SQRT_3_BY_2);
   svm(&mCtrl.va_set, &mCtrl.vb_set, &dutya, &dutyb, &dutyc);
+  // uint32_t duty1, duty2, duty3, top;
+  // svm2(-mCtrl.va_set, -mCtrl.vb_set, TIM1->ARR, &duty1, &duty2, &duty3);
+  // TIMER_UPDATE_DUTY(duty1, duty2, duty3);
   // set output
   TIMER_UPDATE_DUTY(dutyc, dutyb, dutya);
 }
@@ -1436,7 +1431,6 @@ CH_IRQ_HANDLER(Vector88) {
   ADC_ClearITPendingBit(ADC1, ADC_IT_EOS);
   ADC1->CR |= ADC_CR_ADSTART;
 
-
   if(++voltmeasSlowDownCtr == FOC_VOLT_MEAS_SLOWDOWN)
   {
     voltmeasSlowDownCtr = 0;
@@ -1477,6 +1471,10 @@ CH_IRQ_HANDLER(VectorFC) {
   ADC3->CR |= ADC_CR_ADSTART;
 
   dt = 1.0/((float)FOC_F_SW);
+
+  // store supply voltage
+  UTIL_LP_FAST(mCtrl.vsupply, ADC_VOLT(ADC_CH_SUPPL), FOC_LP_FAST_CONSTANT);
+  ADC1->CR |= ADC_CR_ADSTART;
 
   // Current calculation time: 1.944us
   mCtrl.ipa_is = ADC_CURR_A();
