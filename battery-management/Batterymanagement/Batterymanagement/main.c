@@ -8,11 +8,12 @@
 #include <avr/interrupt.h>
 #include <avr/io.h>
 
-#define TRAN_VOLTAGE          144   //(1024/5V)*0,7V  =143,36 =~144 (cell offset)
+#define MAX_CURRENT			  100	// ??????????? max current for PWM
+#define MIN_CURRENT			  0		// min Current for PWM
 #define CELL_VOLTAGE_MAX      880   //(1024/5V)*4,3V  =880,64 =~880
 #define CELL_VOLTAGE_SOLL     850   //(1024/5V)*4,15V =849,92 =~850
 #define CELL_VOLATGE_MIN      615   //(1024/5V)*3,00V =614,40 =~615
-#define MIN_CURRENT           50    // ??? switches from CV => OFF
+#define LIMIT_LOW_CURRENT     50    // ??? switches from CV => OFF
 #define BALANCER_HYSTERESE    10    // Unterschied zwischen Min/Max Spannung 0,05V*(1024/5V)= 10,24
 #define PWM                   OCR0A
 
@@ -56,7 +57,7 @@ void init_IO(){
  *  PB3 MOSI
  *  PB4 MISO
  *  PB5 SCK
- *  PB6 V_Meas
+ *  PB6 NC
  *  PB7 Selbsthaltung
  */
     DDRB  = 0b11100001;
@@ -71,7 +72,7 @@ void init_IO(){
  *  PC4 ADC cell 5
  *  PC5 ADC cell 6
  *  PC6 Reset pin 
- *  PC7 ??
+ *  PC7 NC
  */  
     DDRC  = 0x00;      // PORTC 0(PCB Pin A0) > Input
     PORTC = 0x00;      // no Pullups
@@ -118,14 +119,12 @@ int ADC_Read(int ch)
 
 void ReadCell(void){
         // Read
-        PORTD|=(1<<6);     //V_MEAS on
-        cell[0]=ADC_Read(0)- TRAN_VOLTAGE;      
-        cell[1]=ADC_Read(1)*2-ADC_Read(0)  - TRAN_VOLTAGE;     
-        cell[2]=ADC_Read(2)*3-ADC_Read(1)*2- TRAN_VOLTAGE;
-        cell[3]=ADC_Read(3)*4-ADC_Read(2)*3- TRAN_VOLTAGE;
-        cell[4]=ADC_Read(4)*5-ADC_Read(3)*4- TRAN_VOLTAGE;
-        cell[5]=ADC_Read(5)*6-ADC_Read(4)*5- TRAN_VOLTAGE;
-        PORTD&=~(1<<6);  //V_MEAS off
+        cell[0]=ADC_Read(0);      
+        cell[1]=ADC_Read(1)*2-ADC_Read(0);     
+        cell[2]=ADC_Read(2)*3-ADC_Read(1)*2;
+        cell[3]=ADC_Read(3)*4-ADC_Read(2)*3;
+        cell[4]=ADC_Read(4)*5-ADC_Read(3)*4;
+        cell[5]=ADC_Read(5)*6-ADC_Read(4)*5;
         
         current= ADC_Read(6); 
         inputVoltage= ADC_Read(7);
@@ -168,7 +167,6 @@ void Statemachine(){
           }
         }
        if(second>=600){          // Timeout after 10 min no battery usage
-	      PWM=0x00;
           state=Shutdown;  
        }
       break;  
@@ -179,7 +177,7 @@ void Statemachine(){
         if(cell_Max>=CELL_VOLTAGE_MAX){
           state=Balance;
           }
-        else if(PWM<=254){
+        else if(PWM<=MAX_CURRENT){
           PWM++;  // increment current (PWM)
           }
         if(cell_Min>=CELL_VOLTAGE_SOLL){
@@ -194,16 +192,16 @@ void Statemachine(){
     case Charge_CV:
         PORTB |= (1<<0);  //Turn on LED 2
         
-        if(cell_Max>CELL_VOLTAGE_SOLL && PWM>=1){
+        if(cell_Max>CELL_VOLTAGE_SOLL && PWM>=MIN_CURRENT){
           PWM--; // decrement current (PWM)
         }
-        else if(cell_Max<=CELL_VOLTAGE_SOLL && PWM<=254){
+        else if(cell_Max<=CELL_VOLTAGE_SOLL && PWM<=MAX_CURRENT){
           PWM++;  // increment current (PWM)
           }
         if(cell_Max>=CELL_VOLTAGE_MAX){
           state=Balance;
           }
-        if(current<= MIN_CURRENT){
+        if(current<= LIMIT_LOW_CURRENT){
 		  PWM=0x00;
 		  PORTD|=(1<<3);	//Turn on LED3
           state=Shutdown;
@@ -234,7 +232,7 @@ void Statemachine(){
         break;
         
     case Shutdown:
-          PORTB |= (1<<1);  //Turn on LED 3
+		  PWM=0x00;			// PWM off
           while(1){
           PORTB&=~(1<<7);   // Selbsthaltung off
           }
@@ -247,15 +245,16 @@ void init()
   init_IO();
   init_timer();
   init_ADC();
-  state=Battery;                // Start State
+  state=Battery;      //  Start State            
 }
 
 
 
-void main(){
+int main(){
   init();
   while(1){
     ReadCell();
     Statemachine(); 
   }
+  return 0;
 }
