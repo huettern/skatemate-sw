@@ -127,11 +127,11 @@
 #define FOC_PARAM_DEFAULT_OBS_SPEED_ITERM_MAX  10.0
 #define FOC_PARAM_DEFAULT_OBS_SPEED_ITERM_MIN  -10.0
 
-#define FOC_PARAM_DEFAULT_CURR_D_KP   0.08
-#define FOC_PARAM_DEFAULT_CURR_D_KI   10.0
+#define FOC_PARAM_DEFAULT_CURR_D_KP   0.1
+#define FOC_PARAM_DEFAULT_CURR_D_KI   20.0
 
-#define FOC_PARAM_DEFAULT_CURR_Q_KP   0.05
-#define FOC_PARAM_DEFAULT_CURR_Q_KI   1.0
+#define FOC_PARAM_DEFAULT_CURR_Q_KP   0.3
+#define FOC_PARAM_DEFAULT_CURR_Q_KI   20.0
 
 #define FOC_PARAM_DEFAULT_ITERM_CEIL     100.0
 #define FOC_PARAM_DEFAULT_ITERM_FLOOR    -100.0
@@ -1560,19 +1560,19 @@ CH_IRQ_HANDLER(VectorFC) {
     speedSlowDownCtr = 0;
     dtspeed = dt * FOC_SPEED_CONTROLLER_SLOWDOWN;
     // Force a step for the current controller
-    #ifdef DEBUG_CONTROLLERS
-    if((mControllerDebugCtr < (CONT_STORE_DEPTH/4)) || (!mStoreController))
-    #endif
-    #ifdef DEBUG_OBSERVER
-    if((mObsDebugCounter < (OBS_STORE_DEPTH/2)) || (!mStoreObserver))
-    #endif
-    {
-      mCtrl.iq_set = 3;
-    }
-    else
-    {
-      mCtrl.iq_set = 6;
-    }
+    // #ifdef DEBUG_CONTROLLERS
+    // if((mControllerDebugCtr < (CONT_STORE_DEPTH/4)) || (!mStoreController))
+    // #endif
+    // #ifdef DEBUG_OBSERVER
+    // if((mObsDebugCounter < (OBS_STORE_DEPTH/2)) || (!mStoreObserver))
+    // #endif
+    // {
+    //   mCtrl.iq_set = 3;
+    // }
+    // else
+    // {
+    //   mCtrl.iq_set = 6;
+    // }
     if(mState == MC_CLOSED_LOOP_SPEED)
     {
       // runSpeedController(dtspeed);
