@@ -8,10 +8,10 @@ general:
 
 dependencies:
   pre:
-    - sudo add-apt-repository -y ppa:team-gcc-arm-embedded/ppa
+    # - sudo add-apt-repository -y ppa:team-gcc-arm-embedded/ppa
     - sudo apt-get update
-    - sudo apt-get -y install gcc-arm-none-eabi
-    - sudo apt-get install doxygen
+    # - sudo apt-get -y install gcc-arm-none-eabi
+    - sudo apt-get -y install doxygen doxygen-latex graphviz
 test:
   override:
     # - make

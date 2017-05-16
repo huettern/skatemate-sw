@@ -8,20 +8,20 @@ __AUTHOR__="Jeroen de Bruijn"
 # - Packages doxygen doxygen-doc doxygen-latex doxygen-gui graphviz
 #   must be installed.
 # - Doxygen configuration file must have the destination directory empty and
-#   source code directory with a $(TRAVIS_BUILD_DIR) prefix.
+#   source code directory with a $(circle_BUILD_DIR) prefix.
 # - An gh-pages branch should already exist. See below for mor info on hoe to
 #   create a gh-pages branch.
 #
 # Required global variables:
-# - TRAVIS_BUILD_NUMBER : The number of the current build.
-# - TRAVIS_COMMIT       : The commit that the current build is testing.
+# - CIRCLE_BUILD_NUM : The number of the current build.
+# - CIRCLE_SHA1       : The commit that the current build is testing.
 # - DOXYFILE            : The Doxygen configuration file.
 # - GH_REPO_NAME        : The name of the repository.
 # - GH_REPO_REF         : The GitHub reference to the repository.
 # - GH_REPO_TOKEN       : Secure token to the github repository.
 #
-# For information on how to encrypt variables for Travis CI please go to
-# https://docs.travis-ci.com/user/environment-variables/#Encrypted-Variables
+# For information on how to encrypt variables for circle CI please go to
+# https://docs.circle-ci.com/user/environment-variables/#Encrypted-Variables
 # or https://gist.github.com/vidavidorra/7ed6166a46c537d3cbd2
 # For information on how to create a clean gh-pages branch from the master
 # branch, please go to https://gist.github.com/vidavidorra/846a2fc7dd51f4fe56a0
@@ -36,7 +36,6 @@ __AUTHOR__="Jeroen de Bruijn"
 ################################################################################
 ##### Setup this script and get the current gh-pages branch.               #####
 echo 'Setting up the script...'
-printenv
 # Exit with nonzero exit code if anything fails
 set -e
 
@@ -45,21 +44,21 @@ mkdir code_docs
 cd code_docs
 
 # Get the current gh-pages branch
-git clone -b gh-pages https://git@$GH_REPO_REF
+git clone -b motorcontrol https://${GH_REPO_TOKEN}@$GH_REPO_REF
 cd $GH_REPO_NAME
 
 ##### Configure git.
 # Set the push default to simple i.e. push only the current branch.
 git config --global push.default simple
-# Pretend to be an user called Travis CI.
-git config user.name "Travis CI"
-git config user.email "travis@travis-ci.org"
+# Pretend to be an user called circle CI.
+git config user.name "circle CI"
+git config user.email "circle@circle-ci.org"
 
 # Remove everything currently in the gh-pages branch.
 # GitHub is smart enough to know which files have changed and which files have
 # stayed the same and will only update the changed files. So the gh-pages branch
 # can be safely cleaned, and it is sure that everything pushed later is the new
-# documentation.
+# documentation. 
 rm -rf *
 
 # Need to create a .nojekyll file to allow filenames starting with an underscore
@@ -88,9 +87,9 @@ if [ -d "html" ] && [ -f "html/index.html" ]; then
     # stayed the same and will only update the changed files.
     git add --all
 
-    # Commit the added files with a title and description containing the Travis CI
+    # Commit the added files with a title and description containing the circle CI
     # build number and the GitHub commit reference that issued this build.
-    git commit -m "Deploy code docs to GitHub Pages Travis build: ${TRAVIS_BUILD_NUMBER}" -m "Commit: ${TRAVIS_COMMIT}"
+    git commit -m "Deploy code docs to GitHub Pages circle build: ${CIRCLE_BUILD_NUM}" -m "Commit: ${CIRCLE_SHA1}"
 
     # Force push to the remote gh-pages branch.
     # The ouput is redirected to /dev/null to hide any sensitive credential data
