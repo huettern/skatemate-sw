@@ -221,3 +221,6 @@ $RECYCLE.BIN/
 *.lst
 *.bin
 *.dmp
+
+# User
+motorcontrol/doc/*
