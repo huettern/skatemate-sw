@@ -118,7 +118,7 @@ include $(F3STDPERIPH)/stm32f3_stdperiph.mk
 
 
 # Define linker script file here
-LDSCRIPT= $(STARTUPLD)/STM32F303xC.ld
+LDSCRIPT= STM32F303xE_custom.ld
 
 # C sources that can be compiled in ARM or THUMB mode depending on the global
 # setting.
@@ -253,7 +253,7 @@ OPENOCD = openocd
 
 TARGET = build/$(PROJECT)
 
-OOCD_INIT  += -f board/openocd.cfg
+OOCD_INIT  += -f openocd.cfg
 OOCD_INIT  += -c "adapter_khz 1800"
 OOCD_INIT  += -c init
 OOCD_INIT  += -c "reset init"
