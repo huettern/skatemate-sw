@@ -118,7 +118,7 @@ include $(F3STDPERIPH)/stm32f3_stdperiph.mk
 
 
 # Define linker script file here
-LDSCRIPT= STM32F303xE_custom.ld
+LDSCRIPT= STM32F303xE.ld
 
 # C sources that can be compiled in ARM or THUMB mode depending on the global
 # setting.

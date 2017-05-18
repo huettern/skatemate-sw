@@ -102,7 +102,7 @@ int main(void)
   /**
   * User init
   */
-  usbcdcInit();
+  // usbcdcInit();
 
   /**
    * ICU for PWM capture
@@ -127,9 +127,9 @@ int main(void)
 
   // wait 10sec
   uint16_t ctr = 0;
-  shellInit();
-  drvInit();
-  mcfInit();
+  // shellInit();
+  // drvInit();
+  // mcfInit();
   palSetPadMode(GPIOB, 10, PAL_MODE_ALTERNATE(7)); // used function : USART3_TX
   palSetPadMode(GPIOB, 11, PAL_MODE_ALTERNATE(7)); // used function : USART3_RX
   sdStart(&SD3, NULL);
@@ -139,18 +139,27 @@ int main(void)
   // mcfSetCurrentFactor(0.2);
   while (true) 
   {
-    chThdSleepMilliseconds(1);
-    if(++ctr > 100)
-    {
-      input_val = ((float)last_width - PWM_IN_MID)/((float)PWM_IN_HIGH - PWM_IN_MID);
-      if(input_val > 1.0) input_val = 1.0;
-      if(input_val < -1.0) input_val = -1.0;
-      mcfSetCurrentFactor(input_val);
-      ctr = 0;
-    }
+
+
+
+    chThdSleepMilliseconds(200);
+    palSetPad(GPIOC, 13);
+    chThdSleepMilliseconds(200);
+    palClearPad(GPIOC, 13);
+
+    
+    // chThdSleepMilliseconds(1);
+    // if(++ctr > 100)
+    // {
+    //   input_val = ((float)last_width - PWM_IN_MID)/((float)PWM_IN_HIGH - PWM_IN_MID);
+    //   if(input_val > 1.0) input_val = 1.0;
+    //   if(input_val < -1.0) input_val = -1.0;
+    //   mcfSetCurrentFactor(input_val);
+    //   ctr = 0;
+    // }
     
     
-    usbcdcHandleShell();
+    // usbcdcHandleShell();
   }
   
   
