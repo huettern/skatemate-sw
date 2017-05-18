@@ -253,11 +253,11 @@ OPENOCD = openocd
 
 TARGET = build/$(PROJECT)
 
-OOCD_INIT  += -f board/stm32f3discovery.cfg
+OOCD_INIT  += -f board/openocd.cfg
 OOCD_INIT  += -c "adapter_khz 1800"
 OOCD_INIT  += -c init
 OOCD_INIT  += -c "reset init"
-#OOCD_INIT += -c "targets"
+OOCD_INIT += -c "targets"
 
 #OOCD_FLASH = -c "reset halt"
 OOCD_FLASH += -c "flash write_image erase $(TARGET).elf"

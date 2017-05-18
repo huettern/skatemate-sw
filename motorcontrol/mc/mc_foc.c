@@ -822,7 +822,10 @@ static THD_FUNCTION(mcfocMainThread, arg) {
   // mState = MC_CLOSED_LOOP_CURRENT;
   while (true) 
   {
-    chThdSleepMilliseconds(4000);
+    chThdSleepMilliseconds(200);
+    palSetPad(GPIOC, 13);
+    chThdSleepMilliseconds(200);
+    palClearPad(GPIOC, 13);
   }
 }
 
@@ -1136,7 +1139,7 @@ static void lockMotor(void)
 {
   mpiId.istate = 0.0;
   mpiIq.istate = 0.0;
-  palSetPad(GPIOE, GPIOE_LED7_GREEN);
+  // palSetPad(GPIOE, GPIOE_LED7_GREEN);
   palSetPadMode(DRV_INH_A_PORT, DRV_INH_A_PIN, PAL_MODE_ALTERNATE(6) |
                            PAL_STM32_OSPEED_HIGHEST);
   palSetPadMode(DRV_INH_B_PORT, DRV_INH_B_PIN, PAL_MODE_ALTERNATE(6) |
@@ -1157,7 +1160,7 @@ static void lockMotor(void)
  */
 static void releaseMotor(void)
 {
-  palClearPad(GPIOE, GPIOE_LED7_GREEN);
+  // palClearPad(GPIOE, GPIOE_LED7_GREEN);
   palSetPadMode(DRV_INH_A_PORT, DRV_INH_A_PIN, PAL_MODE_OUTPUT_PUSHPULL);
   palClearPad(DRV_INH_A_PORT, DRV_INH_A_PIN);
   palSetPadMode(DRV_INH_B_PORT, DRV_INH_B_PIN, PAL_MODE_OUTPUT_PUSHPULL);
@@ -1518,7 +1521,7 @@ CH_IRQ_HANDLER(VectorFC) {
 
   CH_IRQ_PROLOGUE();
   chSysLockFromISR();
-  palSetPad(GPIOE,14);
+  // palSetPad(GPIOE,14);
 
   ADC_ClearITPendingBit(ADC3, ADC_IT_EOS);
   ADC3->CR |= ADC_CR_ADSTART;
@@ -1627,7 +1630,7 @@ CH_IRQ_HANDLER(VectorFC) {
 #endif
 
 
-  palClearPad(GPIOE,14);
+  // palClearPad(GPIOE,14);
   chSysUnlockFromISR(); 
   CH_IRQ_EPILOGUE();
 }

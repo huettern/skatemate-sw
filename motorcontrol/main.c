@@ -74,14 +74,10 @@ static ICUConfig icucfg = {
 /* callbacks                                                                 */
 /*===========================================================================*/
 static void icuwidthcb(ICUDriver *icup) {
-
-  palSetPad(GPIOE, GPIOE_LED9_BLUE);
   last_width = icuGetWidthX(icup);
 }
 
 static void icuperiodcb(ICUDriver *icup) {
-
-  palClearPad(GPIOE, GPIOE_LED9_BLUE);
   last_period = icuGetPeriodX(icup);
 }
 
@@ -137,6 +133,8 @@ int main(void)
   palSetPadMode(GPIOB, 10, PAL_MODE_ALTERNATE(7)); // used function : USART3_TX
   palSetPadMode(GPIOB, 11, PAL_MODE_ALTERNATE(7)); // used function : USART3_RX
   sdStart(&SD3, NULL);
+
+  palSetPadMode(GPIOC, 13, PAL_MODE_OUTPUT_PUSHPULL);
   // utlmEnable(true);
   // mcfSetCurrentFactor(0.2);
   while (true) 
@@ -202,7 +200,7 @@ int main(void)
 
 void assert_failed(uint8_t* file, uint32_t line) {
   // DBG("Assert fail at File %s Line %d", file, (int)line);
-  while(1) palSetPad(GPIOE, GPIOE_LED3_RED);;   // hang here (behavior is our your choice)  
+  while(1) palSetPad(GPIOC, 15);;   // hang here (behavior is our your choice)  
 } 
 
 /** @} */
