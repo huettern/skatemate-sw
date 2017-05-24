@@ -273,8 +273,12 @@ OOCD_FLASH += -c shutdown
 RULESPATH = $(CHIBIOS)/os/common/ports/ARMCMx/compilers/GCC
 include $(RULESPATH)/rules.mk
 
-doc: doxygen
+doc:
+	mkdir doc
 	doxygen doxygen.cfg
+
+cleandoc:
+	rm -rf doc
 
 flash: $(TARGET).elf
 	$(OPENOCD) $(OOCD_INIT) $(OOCD_FLASH)
@@ -287,4 +291,4 @@ killgdbserver:
 	# @echo "shutdown" | telnet localhost 4444
 	killall openocd
 
-.PHONY: flash gdbserver killgdbserver doc
+.PHONY: flash gdbserver killgdbserver doc cleandoc
