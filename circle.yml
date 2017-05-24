@@ -5,8 +5,6 @@ dependencies:
     - sudo apt-get -y install gcc-arm-none-eabi
 test:
   override:
-    - cd motorcontrol/
-    - ls -al
-    - make
+    - cd motorcontrol/ && make
 checkout:
   post:
