@@ -89,10 +89,6 @@ static void icuperiodcb(ICUDriver *icup) {
  */
 int main(void) 
 {
-  static float input_val;
-
-  uint32_t op1,op2,res;
-
   /*
   * System initializations.
   */
@@ -107,41 +103,31 @@ int main(void)
   /**
    * ICU for PWM capture
    */
-  icuStart(&ICUD3, &icucfg);
-  palSetPadMode(GPIOB, 5, PAL_MODE_ALTERNATE(2));
-  icuStartCapture(&ICUD3);
-  icuEnableNotifications(&ICUD3);
+  // icuStart(&ICUD3, &icucfg);
+  // palSetPadMode(GPIOB, 5, PAL_MODE_ALTERNATE(2));
+  // icuStartCapture(&ICUD3);
+  // icuEnableNotifications(&ICUD3);
 
   /*
    * Shell manager initialization.
    */
   // shellInit();
 
-  palSetPadMode(GPIOE, 14, PAL_MODE_OUTPUT_PUSHPULL);
-  palSetPad(GPIOE,14);
-
   /**
    * Idle thread
    */
   chRegSetThreadName(DEFS_THD_IDLE_NAME);
 
-  // wait 10sec
-  uint16_t ctr = 0;
   // shellInit();
   // drvInit();
   // mcfInit();
   palSetPadMode(GPIOB, 10, PAL_MODE_ALTERNATE(7)); // used function : USART3_TX
   palSetPadMode(GPIOB, 11, PAL_MODE_ALTERNATE(7)); // used function : USART3_RX
-  sdStart(&SD3, NULL);
+  // sdStart(&SD3, NULL);
 
   palSetPadMode(GPIOC, 13, PAL_MODE_OUTPUT_PUSHPULL);
-  // utlmEnable(true);
-  // mcfSetCurrentFactor(0.2);
   while (true) 
   {
-
-
-
     chThdSleepMilliseconds(200);
     palSetPad(GPIOC, 13);
     chThdSleepMilliseconds(200);
