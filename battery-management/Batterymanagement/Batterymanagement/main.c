@@ -140,20 +140,29 @@ void ReadCell(void){
         // check for Errors/ undervoltage protection
         if(cell_Min<=CELL_VOLATGE_MIN){
           state=Shutdown;
+		}
+		
+		// check if the cord got pulled
+		if(current<= 10){	// no current measured
+		  PORTB&=~(0b111);	// Turn off LED1 - LED3
+		  state=Battery;
+		
         } 
   }
   
 void Statemachine(){
   static int old_Max = cell_Max;
+  static int kp;	//Regelung P Anteil
+  static int ki;	//Regelung I Anteil
   
   switch(state){
     
     case Battery:
+      PORTD&=~(0b111111);     // C1-C6 off  (Balancer Transistoren)
+      PWM   = 0x00;           // PWM_OFF
+	  
       if(inputVoltage>=300){
         PORTD&=~(1<<7);         // Shutoff EngineControl (Noah)
-        PORTD&=~(1<<6);         // V_MEAS off (ADC Mess Transistoren)
-        PORTD&=~(0b111111);     // C1-C6 off  (Balancer Transistoren)
-        PWM   = 0x00;           // PWM_OFF
         state=Charge_CC;
         }
       else{
@@ -177,16 +186,23 @@ void Statemachine(){
         if(cell_Max>=CELL_VOLTAGE_MAX){
           state=Balance;
           }
-        else if(PWM<=MAX_CURRENT){
+		
+		// PI-Regler
+        if(PWM<=MAX_CURRENT){
+		  /* dt=1.0/fs
+		  *  error= soll-ist
+		  *  itern += error*dt*ki
+		  *  if(item>MAX) {iterm=MAX}
+		  *  PWM=kp*error+iterm;
+		  */
+		  
           PWM++;  // increment current (PWM)
           }
+		  
+		  
         if(cell_Min>=CELL_VOLTAGE_SOLL){
           state=Charge_CV;
           }
-		if(current<= 10){	//pull the cord
-			PORTB&=~(1<<1);	// Turn off LED1
-			state=Battery;
-		}
         break;
 
     case Charge_CV:
@@ -206,10 +222,6 @@ void Statemachine(){
 		  PORTD|=(1<<3);	//Turn on LED3
           state=Shutdown;
           }
-		if(current<= 10){	//pull the cord
-			PORTB&=~(0b11);	// Turn off LED1 and LED2
-			state=Battery;
-		}
         break;
 
     case Balance:
