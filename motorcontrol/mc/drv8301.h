@@ -92,13 +92,66 @@
 /*===========================================================================*/
 /* Datatypes                                                                 */
 /*===========================================================================*/
+typedef enum
+{
+  /**
+   * Low Side FET C overcurrent
+   */
+  DRV_FLT_FETLC_OC = 0x001,
+  /**
+   * High Side FET C overcurrent
+   */
+  DRV_FLT_FETHC_OC = 0x002,
+  /**
+   * Low Side FET B overcurrent
+   */
+  DRV_FLT_FETLB_OC = 0x004,
+  /**
+   * High Side FET B overcurrent
+   */
+  DRV_FLT_FETHB_OC = 0x008,
+  /**
+   * Low Side FET A overcurrent
+   */
+  DRV_FLT_FETLA_OC = 0x010,
+  /**
+   * High Side FET A overcurrent
+   */
+  DRV_FLT_FETHA_OC = 0x020,
+  /**
+   * Overtemperature Warning
+   */
+  DRV_FLT_OTW = 0x040,
+  /**
+   * Over Temperature Latched Shut Down of Gate Driver and Charge Pump
+   */
+  DRV_FLT_OTSD = 0x080,
+  /**
+   * Power supply for gate driver, current shunt amplifier, 
+   * and SPI communication undervoltage
+   */
+  DRV_FLT_PVDD_UV = 0x100,
+  /**
+   * Internal gate driver voltage regulator undervoltage
+   */
+  DRV_FLT_GVDD_UV = 0x200,
+  /**
+   * Internal gate driver voltage regulator overvoltage
+   */
+  DRV_FLT_GVDD_OV = 0x400
+} drvFault_t;
 
+/**
+ * Masks the FET overcurrent bits from a drvFault_t
+ */
+#define DRV_FLT_FET_MASK 0x003f
 
 /*===========================================================================*/
 /* Module public functions.                                                  */
 /*===========================================================================*/
 void drvInit(void);
 void drvDumpStatus(void);
+drvFault_t drvGetFault(void);
 
 #endif
 /** @} */

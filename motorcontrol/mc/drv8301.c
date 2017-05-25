@@ -188,7 +188,7 @@ void drvInit(void)
   // Control register 1
   writePacket( DRV_SPI_CTRL1 |
     CTRL1_GATE_CURRENT_1_7_A | CTRL1_GATE_RESET_NORMAL | 
-    CTRL1_PWM_MODE_6_INPUT | CTRL1_OCP_MODE_CURRENT_LIMIT | CTRL1_OC_ADJ_SET(12)
+    CTRL1_PWM_MODE_6_INPUT | CTRL1_OCP_MODE_CURRENT_LIMIT | CTRL1_OC_ADJ_SET(18)
     );
   // Control register 2
   writePacket( DRV_SPI_CTRL2 |
@@ -222,6 +222,21 @@ PWRGD    %d\r\n",
         palReadPad(DRV_NOCTW_PORT, DRV_NOCTW_PIN),
         palReadPad(DRV_PWRGD_PORT, DRV_PWRGD_PIN)
     );
+}
+
+/**
+ * @brief      Get the faults of the driver
+ *
+ * @return     Fault register bits
+ */
+drvFault_t drvGetFault(void)
+{
+  uint16_t sr2;
+  drvFault_t faults;
+  // Get all registers and mask out the data bits
+  sr2 = readPacket(DRV_SPI_SR2) & 0x07ff;
+  faults = mSR1Value | ((sr2 & 0x0080) << 3);
+  return faults;
 }
 
 /*===========================================================================*/

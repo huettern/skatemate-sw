@@ -47,9 +47,9 @@
 /* DEBUG                                                                     */
 /*===========================================================================*/
 // #define DEBUG_ADC
-//#define DEBUG_SVM
+#define DEBUG_SVM
 //#define DEBUG_OBSERVER
-#define DEBUG_CONTROLLERS
+//#define DEBUG_CONTROLLERS
 
 #define DEBUG_DOWNSAMPLE_FACTOR 10
 
@@ -70,11 +70,11 @@
  * FOC PWM output deadtime cycles. refer to p.592 of reference manual
  * allowed value 0..255
  */
-#define FOC_PWM_DEADTIME_CYCLES 0 // cycles
+#define FOC_PWM_DEADTIME_CYCLES 1 // cycles
 /**
  * How fast the control thread should run
  */
-#define FOC_THREAD_INTERVAL 100 // us
+#define FOC_THREAD_INTERVAL 100 // ms
 /**
  * How much slower the current control loop should run
  */
@@ -266,6 +266,7 @@ static float mMeasuredResistance = 0;
 static float mdtMeasure;
 static float mdt;
 
+
 /*===========================================================================*/
 /* SHELL settings                                                            */
 /*===========================================================================*/
@@ -277,10 +278,12 @@ static const usbcdcParameterStruct_t mShellcurr_qKp = {"curr_q_kp", &mpiIq.kp};
 static const usbcdcParameterStruct_t mShellcurr_qKi = {"curr_q_ki", &mpiIq.ki};
 static const usbcdcParameterStruct_t mShellSpeedKp = {"speed_kp", &mpiSpeed.kp};
 static const usbcdcParameterStruct_t mShellSpeedKi = {"speed_ki", &mpiSpeed.ki};
-static const usbcdcParameterStruct_t mShellObsGain = {"obs_gain", &mFOCParms.obsGain};
 static const usbcdcParameterStruct_t mShellwSet = {"w_set", &mCtrl.w_set};
 static const usbcdcParameterStruct_t mShellIdSet = {"id_set", &mCtrl.id_set};
 static const usbcdcParameterStruct_t mShellIqSet = {"iq_set", &mCtrl.iq_set};
+static const usbcdcParameterStruct_t mShellfcf = {"fc_f", &mForcedCommFreq};
+static const usbcdcParameterStruct_t mShellfcd = {"fc_vd", &mForcedCommVd};
+static const usbcdcParameterStruct_t mShellfcq = {"fc_vq", &mForcedCommVq};
 
 static const usbcdcParameterStruct_t mShellL = {"ls", &mMotParms.Ls};
 static const usbcdcParameterStruct_t mShellR = {"rs", &mMotParms.Rs};
@@ -295,7 +298,6 @@ static const usbcdcParameterStruct_t* mShellVars[] =
   &mShellcurr_dKi,
   &mShellcurr_qKp,
   &mShellcurr_qKi,
-  &mShellObsGain,
   &mShellwSet,
   &mShellSpeedKp,
   &mShellSpeedKi,
@@ -305,6 +307,9 @@ static const usbcdcParameterStruct_t* mShellVars[] =
   &mShellR,
   &mShellPSI,
   &mShellLambda,
+  &mShellfcf,
+  &mShellfcd,
+  &mShellfcq,
   NULL
 };
 
@@ -735,6 +740,43 @@ void mcfSetCurrentFactor(float in)
 }
 
 /**
+ * @brief      Lock or release the motor
+ *
+ * @param[in]  in    1 for lock
+ */
+void mcfSetMotorLock(uint8_t in)
+{
+  if(in)
+  {
+    lockMotor();
+  }
+  else
+  {
+    releaseMotor();
+  }
+}
+/**
+ * @brief      Sets the motor in forced commutation with the given frequency
+ *
+ * @param[in]  in    the mechanical frequency to spin
+ */
+void mcfSetForcedCommutationFrequency(float in)
+{
+  if(in == 0.0)
+  {
+    mState = MC_HALT;
+    releaseMotor();
+    return;
+  }
+  if(mState != MC_OPEN_LOOP)
+  {
+    mForcedCommFreq = in * mMotParms.p;
+    mState = MC_OPEN_LOOP;
+    lockMotor();
+  }
+}
+
+/**
  * @brief      Dumps the local data to the debug stream
  */
 void mcfDumpData(void)
@@ -822,10 +864,58 @@ static THD_FUNCTION(mcfocMainThread, arg) {
   // mState = MC_CLOSED_LOOP_CURRENT;
   while (true) 
   {
-    chThdSleepMilliseconds(200);
-    palSetPad(GPIOC, 13);
-    chThdSleepMilliseconds(200);
-    palClearPad(GPIOC, 13);
+    chThdSleepMilliseconds(FOC_THREAD_INTERVAL);
+
+    /**
+     * Check driver status
+     */
+    drvFault_t drvFaults;
+    static uint8_t redLedBlinkPattern = 0;
+    static uint8_t redLedBlinkPatternCtr = 0;
+    if(drvIsFault())
+    {
+      DBG3("-----DRV FAULT-----\r\n");
+      // drvFaults = drvGetFault();
+      if(drvFaults | DRV_FLT_FET_MASK)
+      { 
+        redLedBlinkPattern = 1;
+        DBG3("FET overcurrent\r\n");
+      }
+      if(drvFaults | DRV_FLT_OTW)
+      {
+        redLedBlinkPattern = 2;
+        DBG3("Overtemp Warning\r\n");
+      }
+      if(drvFaults | DRV_FLT_OTSD)
+      {
+        redLedBlinkPattern = 3;
+        DBG3("Overtemp\r\n");
+      }
+      if(drvFaults | DRV_FLT_PVDD_UV)
+      {
+        redLedBlinkPattern = 4;
+        DBG3("PVDD Untervolt\r\n");
+      }
+      if(drvFaults | DRV_FLT_GVDD_UV)
+      {
+        redLedBlinkPattern = 5;
+        DBG3("GVDD Undervolt\r\n");
+      }
+      if(drvFaults | DRV_FLT_GVDD_OV)
+      {
+        redLedBlinkPattern = 6;
+        DBG3("GVDD Overvolt\r\n");
+      }
+    }
+    else
+    {
+      redLedBlinkPattern = 0;
+    }
+    // Blink LED accordingly
+    redLedBlinkPatternCtr++;
+    redLedBlinkPatternCtr%=20;
+    if(redLedBlinkPatternCtr % 2) LED_RED_OFF();
+    else if(redLedBlinkPatternCtr <= (redLedBlinkPattern*2-2)) LED_RED_ON();
   }
 }
 
@@ -1139,7 +1229,7 @@ static void lockMotor(void)
 {
   mpiId.istate = 0.0;
   mpiIq.istate = 0.0;
-  // palSetPad(GPIOE, GPIOE_LED7_GREEN);
+  LED_GRN_ON();
   palSetPadMode(DRV_INH_A_PORT, DRV_INH_A_PIN, PAL_MODE_ALTERNATE(6) |
                            PAL_STM32_OSPEED_HIGHEST);
   palSetPadMode(DRV_INH_B_PORT, DRV_INH_B_PIN, PAL_MODE_ALTERNATE(6) |
@@ -1161,6 +1251,7 @@ static void lockMotor(void)
 static void releaseMotor(void)
 {
   // palClearPad(GPIOE, GPIOE_LED7_GREEN);
+  LED_GRN_OFF();
   palSetPadMode(DRV_INH_A_PORT, DRV_INH_A_PIN, PAL_MODE_OUTPUT_PUSHPULL);
   palClearPad(DRV_INH_A_PORT, DRV_INH_A_PIN);
   palSetPadMode(DRV_INH_B_PORT, DRV_INH_B_PIN, PAL_MODE_OUTPUT_PUSHPULL);
@@ -1521,7 +1612,6 @@ CH_IRQ_HANDLER(VectorFC) {
 
   CH_IRQ_PROLOGUE();
   chSysLockFromISR();
-  // palSetPad(GPIOE,14);
 
   ADC_ClearITPendingBit(ADC3, ADC_IT_EOS);
   ADC3->CR |= ADC_CR_ADSTART;

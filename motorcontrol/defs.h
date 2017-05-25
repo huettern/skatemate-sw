@@ -50,6 +50,12 @@
 #define DBG3(X, ...) chprintf((BaseSequentialStream *)&SD3, X, ##__VA_ARGS__ )
 // #define DBG3(X, ...)
 
+#define LED_RED_ON() palSetPad(GPIOC, 15)
+#define LED_RED_OFF() palClearPad(GPIOC, 15)
+#define LED_GRN_ON() palSetPad(GPIOC, 13)
+#define LED_GRN_OFF() palClearPad(GPIOC, 13)
+#define LED_BLU_ON() palSetPad(GPIOC, 14)
+#define LED_BLU_OFF() palClearPad(GPIOC, 14)
 
 /*===========================================================================*/
 /* Test defines. Always uncomment for production                             */
