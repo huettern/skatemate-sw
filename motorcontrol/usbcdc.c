@@ -187,6 +187,15 @@ static void cmd_release(BaseSequentialStream *chp, int argc, char *argv[])
   (void)argv;
   mcfSetMotorLock(0);
 }
+static void cmd_volt(BaseSequentialStream *chp, int argc, char *argv[])
+{
+  (void)chp;
+  (void)argc;
+  (void)argv;
+  mcfDumpData();
+}
+
+
 static void cmd_get(BaseSequentialStream *chp, int argc, char *argv[])
 {
   (void)argc;
@@ -229,6 +238,7 @@ static const ShellCommand commands[] = {
     {"lock", cmd_lock},
     {"release", cmd_release},
     {"sample", cmd_sample},
+    {"volt", cmd_volt},
 		{NULL, NULL}
 };
 

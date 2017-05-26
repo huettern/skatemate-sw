@@ -70,7 +70,7 @@
  * FOC PWM output deadtime cycles. refer to p.592 of reference manual
  * allowed value 0..255
  */
-#define FOC_PWM_DEADTIME_CYCLES 1 // cycles
+#define FOC_PWM_DEADTIME_CYCLES 20 // cycles
 /**
  * How fast the control thread should run
  */
@@ -221,7 +221,7 @@ static volatile uint16_t mADCValueStore[ADC_STORE_DEPTH][8]; // raw converted va
 static volatile uint8_t mStoreADC1, mStoreADC3;
 
 #ifdef DEBUG_OBSERVER
-  #define OBS_STORE_DEPTH 1000
+  #define OBS_STORE_DEPTH 500
 #else
   #define OBS_STORE_DEPTH 1
 #endif
@@ -352,12 +352,9 @@ static const usbcdcParameterStruct_t* mShellVars[] =
 #define ADC_STORE_VOLT(i, ch) ( (float)mADCValueStore[i][ch] * mADCtoVoltsFactor)
 /**
  * @brief      Returns the current in the shunt resister
- * @note       TODO: Remove minus for new revision!!!
- * @note       TODO: Removed the minus again on old hardware but why???
  */
 #define ADC_CURR_A() ( ((float)mADCValue[ADC_CH_CURR_A]-mDrvOffA) * mADCtoAmpsFactor )
-// TODO: This 2.2 is a measured difference between the 2 currnet sense outputs from the drv
-#define ADC_CURR_B() ( ((float)mADCValue[ADC_CH_CURR_B]-mDrvOffB) * mADCtoAmpsFactor / 2.2) 
+#define ADC_CURR_B() ( ((float)mADCValue[ADC_CH_CURR_B]-mDrvOffB) * mADCtoAmpsFactor ) 
 #define ADC_STORE_CURR_A(i) ( ((float)mADCValueStore[i][ADC_CH_CURR_A]-mDrvOffA) * -mADCtoAmpsFactor )
 #define ADC_STORE_CURR_B(i) ( ((float)mADCValueStore[i][ADC_CH_CURR_B]-mDrvOffB) * -mADCtoAmpsFactor )
 /**
@@ -781,13 +778,13 @@ void mcfSetForcedCommutationFrequency(float in)
  */
 void mcfDumpData(void)
 {
-  DBG2("\r\n--- ADC ---\r\n");
-  DBG2("          ph_C |     ph_B |     ph_A |     v_in |    cur_b |    cur_a |     temp |     vref\r\n");
-  DBG2("raw       %04d |     %04d |     %04d |     %04d |     %04d |     %04d |     %04d |     %04d\r\n", mADCValue[0], mADCValue[1],
+  DBG3("\r\n--- ADC ---\r\n");
+  DBG3("          ph_C |     ph_B |     ph_A |     v_in |    cur_b |    cur_a |     temp |     vref\r\n");
+  DBG3("raw       %04d |     %04d |     %04d |     %04d |     %04d |     %04d |     %04d |     %04d\r\n", mADCValue[0], mADCValue[1],
     mADCValue[2], mADCValue[3], mADCValue[4], mADCValue[5], mADCValue[6], mADCValue[7]);
-  DBG2("pin    %7.3f |  %7.3f |  %7.3f |  %7.3f |  %7.3f |  %7.3f |  %7.3f |  %7.3f\r\n", ADC_PIN(0), ADC_PIN(1),
+  DBG3("pin    %7.3f |  %7.3f |  %7.3f |  %7.3f |  %7.3f |  %7.3f |  %7.3f |  %7.3f\r\n", ADC_PIN(0), ADC_PIN(1),
     ADC_PIN(2), ADC_PIN(3), ADC_PIN(4), ADC_PIN(5), ADC_PIN(6), ADC_PIN(7));
-  DBG2("SI     %7.3f |  %7.3f |  %7.3f |  %7.3f |  %7.3f |  %7.3f |  %7.3f\r\n", ADC_VOLT(0), ADC_VOLT(1),
+  DBG3("SI     %7.3f |  %7.3f |  %7.3f |  %7.3f |  %7.3f |  %7.3f |  %7.3f\r\n", ADC_VOLT(0), ADC_VOLT(1),
     ADC_VOLT(2), ADC_VOLT(3), ADC_CURR_A(), ADC_CURR_B(), ADC_TEMP(6));
 
   // ADC_StartConversion(ADC1);
@@ -1126,6 +1123,144 @@ static void drvDCCal(void)
  */
 static void svm (float* a, float* b, uint16_t* da, uint16_t* db, uint16_t* dc)
 {
+#define USE_VEDDER_SVM
+
+
+#ifdef USE_VEDDER_SVM
+  uint32_t sector;
+
+  float alpha = *a;
+  float beta = *b;
+  uint32_t PWMHalfPeriod = TIM1->ARR;
+  uint16_t* tAout =da;
+  uint16_t* tBout =db;
+  uint16_t* tCout =dc;
+
+  if (beta >= 0.0f) {
+    if (alpha >= 0.0f) {
+      //quadrant I
+      if (ONE_BY_SQRT_3 * beta > alpha)
+        sector = 2;
+      else
+        sector = 1;
+    } else {
+      //quadrant II
+      if (-ONE_BY_SQRT_3 * beta > alpha)
+        sector = 3;
+      else
+        sector = 2;
+    }
+  } else {
+    if (alpha >= 0.0f) {
+      //quadrant IV5
+      if (-ONE_BY_SQRT_3 * beta > alpha)
+        sector = 5;
+      else
+        sector = 6;
+    } else {
+      //quadrant III
+      if (ONE_BY_SQRT_3 * beta > alpha)
+        sector = 4;
+      else
+        sector = 5;
+    }
+  }
+
+  // PWM timings
+  uint32_t tA, tB, tC;
+
+  switch (sector) {
+
+  // sector 1-2
+  case 1: {
+    // Vector on-times
+    uint32_t t1 = (alpha - ONE_BY_SQRT_3 * beta) * PWMHalfPeriod;
+    uint32_t t2 = (TWO_BY_SQRT_3 * beta) * PWMHalfPeriod;
+
+    // PWM timings
+    tA = (PWMHalfPeriod - t1 - t2) / 2;
+    tB = tA + t1;
+    tC = tB + t2;
+
+    break;
+  }
+
+  // sector 2-3
+  case 2: {
+    // Vector on-times
+    uint32_t t2 = (alpha + ONE_BY_SQRT_3 * beta) * PWMHalfPeriod;
+    uint32_t t3 = (-alpha + ONE_BY_SQRT_3 * beta) * PWMHalfPeriod;
+
+    // PWM timings
+    tB = (PWMHalfPeriod - t2 - t3) / 2;
+    tA = tB + t3;
+    tC = tA + t2;
+
+    break;
+  }
+
+  // sector 3-4
+  case 3: {
+    // Vector on-times
+    uint32_t t3 = (TWO_BY_SQRT_3 * beta) * PWMHalfPeriod;
+    uint32_t t4 = (-alpha - ONE_BY_SQRT_3 * beta) * PWMHalfPeriod;
+
+    // PWM timings
+    tB = (PWMHalfPeriod - t3 - t4) / 2;
+    tC = tB + t3;
+    tA = tC + t4;
+
+    break;
+  }
+
+  // sector 4-5
+  case 4: {
+    // Vector on-times
+    uint32_t t4 = (-alpha + ONE_BY_SQRT_3 * beta) * PWMHalfPeriod;
+    uint32_t t5 = (-TWO_BY_SQRT_3 * beta) * PWMHalfPeriod;
+
+    // PWM timings
+    tC = (PWMHalfPeriod - t4 - t5) / 2;
+    tB = tC + t5;
+    tA = tB + t4;
+
+    break;
+  }
+
+  // sector 5-6
+  case 5: {
+    // Vector on-times
+    uint32_t t5 = (-alpha - ONE_BY_SQRT_3 * beta) * PWMHalfPeriod;
+    uint32_t t6 = (alpha - ONE_BY_SQRT_3 * beta) * PWMHalfPeriod;
+
+    // PWM timings
+    tC = (PWMHalfPeriod - t5 - t6) / 2;
+    tA = tC + t5;
+    tB = tA + t6;
+
+    break;
+  }
+
+  // sector 6-1
+  case 6: {
+    // Vector on-times
+    uint32_t t6 = (-TWO_BY_SQRT_3 * beta) * PWMHalfPeriod;
+    uint32_t t1 = (alpha + ONE_BY_SQRT_3 * beta) * PWMHalfPeriod;
+
+    // PWM timings
+    tA = (PWMHalfPeriod - t6 - t1) / 2;
+    tC = tA + t1;
+    tB = tC + t6;
+
+    break;
+  }
+  }
+
+  *tAout = tA;
+  *tBout = tB;
+  *tCout = tC;
+
+#else
   uint8_t sector;
   float pwmHalfPeriod = TIM1->ARR;
 
@@ -1135,11 +1270,14 @@ static void svm (float* a, float* b, uint16_t* da, uint16_t* db, uint16_t* dc)
   float va = *a;
   float vb = (*b)*ONE_BY_SQRT_3;
 
+  uint8_t kn = 1;
+
   if(fabsf(va) >= fabsf(vb))
   {
     Ta=fabsf(va)-fabsf(vb); // Segment 1,3,4,6
     Tb=fabsf(vb)*2;
-    T0=-Ta-Tb; // assuming Ts = 1;
+    // T0=-Ta-Tb; // assuming Ts = 1;
+    T0=(1-Ta-Tb)*kn-1;
     if (vb >= 0)
     {
       if (va >= 0)
@@ -1181,7 +1319,8 @@ static void svm (float* a, float* b, uint16_t* da, uint16_t* db, uint16_t* dc)
     // Segment 2,5
     Ta=fabsf(va+vb);
     Tb=fabsf(va-vb);
-    T0=-Ta-Tb; // assuming Ts = 1;
+    // T0=-Ta-Tb; // assuming Ts = 1;
+    T0=(1-Ta-Tb)*kn-1;
     if (vb > 0)
     {
       // sector 2
@@ -1200,26 +1339,26 @@ static void svm (float* a, float* b, uint16_t* da, uint16_t* db, uint16_t* dc)
     }
   }
 
+  *da = (uint16_t)(pwmHalfPeriod*(ta+0.5));
+  *db = (uint16_t)(pwmHalfPeriod*(tb+0.5));
+  *dc = (uint16_t)(pwmHalfPeriod*(tc+0.5));  
+#endif   
+
 #ifdef DEBUG_SVM
-  static uint16_t downSampleCtr = 0;
   if(mStoreSVM)
   {
     // copy to store reg
     mSVMDebugCtr %= SVM_STORE_DEPTH;
     mSVMValueStore[mSVMDebugCtr][0] = *a;
     mSVMValueStore[mSVMDebugCtr][1] = *b;
-    mSVMValueStore[mSVMDebugCtr][2] = ta;
-    mSVMValueStore[mSVMDebugCtr][3] = tb;
-    mSVMValueStore[mSVMDebugCtr][4] = tc;
+    mSVMValueStore[mSVMDebugCtr][2] = *da;
+    mSVMValueStore[mSVMDebugCtr][3] = *db;
+    mSVMValueStore[mSVMDebugCtr][4] = *dc;
     mSVMValueStore[mSVMDebugCtr][5] = mObs.theta;
     mSVMValueStore[mSVMDebugCtr++][6] = mObs.omega_e;
     if(mSVMDebugCtr >= SVM_STORE_DEPTH) mStoreSVM = 0;
   }
-#endif
-
-  *da = (uint16_t)(pwmHalfPeriod*(ta+0.5));
-  *db = (uint16_t)(pwmHalfPeriod*(tb+0.5));
-  *dc = (uint16_t)(pwmHalfPeriod*(tc+0.5));        
+#endif   
 }
 
 /**
@@ -1571,30 +1710,29 @@ static void forcedCommutation (void)
  * @brief      ADC1_2 IRQ handler
  */
 CH_IRQ_HANDLER(Vector88) {
-  static uint16_t ctr = 0;
-  static float vd, vq;
+  static uint16_t ctr =0;
   static uint16_t voltmeasSlowDownCtr = 0;
   CH_IRQ_PROLOGUE();
   ADC_ClearITPendingBit(ADC1, ADC_IT_EOS);
   ADC1->CR |= ADC_CR_ADSTART;
 
-  if(++voltmeasSlowDownCtr == FOC_VOLT_MEAS_SLOWDOWN)
-  {
-    voltmeasSlowDownCtr = 0;
-    mSample.volt_sum += ADC_VOLT(ADC_CH_SUPPL);
-    mSample.nVoltSamples++;
-  }
-  if(mStoreADC1)
-  {
-    // copy to store reg
-    mADCValueStore[ctr][0] = mADCValue[0];
-    mADCValueStore[ctr][1] = mADCValue[1];
-    mADCValueStore[ctr][2] = mADCValue[2];
-    mADCValueStore[ctr][3] = mADCValue[3];
-    ctr++;
-    if(ctr >= ADC_STORE_DEPTH) mStoreADC1 = 0;
-    ctr %= ADC_STORE_DEPTH;
-  }
+  // if(++voltmeasSlowDownCtr == FOC_VOLT_MEAS_SLOWDOWN)
+  // {
+  //   voltmeasSlowDownCtr = 0;
+  //   mSample.volt_sum += ADC_VOLT(ADC_CH_SUPPL);
+  //   mSample.nVoltSamples++;
+  // }
+  // if(mStoreADC1)
+  // {
+  //   // copy to store reg
+  //   mADCValueStore[ctr][0] = mADCValue[0];
+  //   mADCValueStore[ctr][1] = mADCValue[1];
+  //   mADCValueStore[ctr][2] = mADCValue[2];
+  //   mADCValueStore[ctr][3] = mADCValue[3];
+  //   ctr++;
+  //   if(ctr >= ADC_STORE_DEPTH) mStoreADC1 = 0;
+  //   ctr %= ADC_STORE_DEPTH;
+  // }
 
   // mc_interface_adc_inj_int_handler();
   CH_IRQ_EPILOGUE();
@@ -1615,6 +1753,7 @@ CH_IRQ_HANDLER(VectorFC) {
 
   ADC_ClearITPendingBit(ADC3, ADC_IT_EOS);
   ADC3->CR |= ADC_CR_ADSTART;
+  ADC1->CR |= ADC_CR_ADSTART;
 
   dt = 1.0/((float)FOC_F_SW);
 
@@ -1632,8 +1771,10 @@ CH_IRQ_HANDLER(VectorFC) {
   ADC1->CR |= ADC_CR_ADSTART;
 
   // Current calculation time: 1.944us
-  mCtrl.ipa_is = ADC_CURR_A();
-  mCtrl.ipb_is = ADC_CURR_B();
+  UTIL_LP_FAST(mCtrl.ipa_is, ADC_CURR_A(), FOC_LP_FAST_CONSTANT);
+  UTIL_LP_FAST(mCtrl.ipb_is, ADC_CURR_B(), FOC_LP_FAST_CONSTANT);
+  // mCtrl.ipa_is = ADC_CURR_A();
+  // mCtrl.ipb_is = ADC_CURR_B();
   mCtrl.ipc_is = -mCtrl.ipa_is -mCtrl.ipb_is;
   clark(&mCtrl.ipa_is, &mCtrl.ipb_is, &mCtrl.ipc_is, &mCtrl.ia_is, &mCtrl.ib_is); //1.727us
   runPositionObserver(dt); // 8.765us

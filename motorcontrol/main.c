@@ -97,7 +97,7 @@ int main(void)
 
   /**
   * User init
-  */
+  // */
   // usbcdcInit();
 
   /**
@@ -138,11 +138,12 @@ int main(void)
   drvInit();
   mcfInit();
 
+  chThdSleepMilliseconds(2000);
+  mcfSetForcedCommutationFrequency(4.285);
   while (true) 
   {
-    mcfSetForcedCommutationFrequency(2.0);
 
-    chThdSleepMilliseconds(200);
+    // chThdSleepMilliseconds(200);
     // palSetPad(GPIOC, 13);
     // palClearPad(GPIOC, 15);
     // chThdSleepMilliseconds(200);
@@ -152,15 +153,17 @@ int main(void)
     // palSetPad(GPIOC, 15);
     // palClearPad(GPIOC, 14);
 
-    // chThdSleepMilliseconds(1);
-    // if(++ctr > 100)
-    // {
-    //   input_val = ((float)last_width - PWM_IN_MID)/((float)PWM_IN_HIGH - PWM_IN_MID);
-    //   if(input_val > 1.0) input_val = 1.0;
-    //   if(input_val < -1.0) input_val = -1.0;
-    //   mcfSetCurrentFactor(input_val);
-    //   ctr = 0;
-    // }
+    chThdSleepMilliseconds(1);
+    float input_val;
+    uint8_t ctr;
+    if(++ctr > 100)
+    {
+      input_val = ((float)last_width - PWM_IN_MID)/((float)PWM_IN_HIGH - PWM_IN_MID);
+      if(input_val > 1.0) input_val = 1.0;
+      if(input_val < -1.0) input_val = -1.0;
+      // mcfSetCurrentFactor(input_val);
+      ctr = 0;
+    }
     
     usbcdcHandleShell();
   }
