@@ -47,8 +47,8 @@
 /* DEBUG                                                                     */
 /*===========================================================================*/
 // #define DEBUG_ADC
-#define DEBUG_SVM
-//#define DEBUG_OBSERVER
+//#define DEBUG_SVM
+#define DEBUG_OBSERVER
 //#define DEBUG_CONTROLLERS
 
 #define DEBUG_DOWNSAMPLE_FACTOR 10
@@ -1771,10 +1771,10 @@ CH_IRQ_HANDLER(VectorFC) {
   ADC1->CR |= ADC_CR_ADSTART;
 
   // Current calculation time: 1.944us
-  UTIL_LP_FAST(mCtrl.ipa_is, ADC_CURR_A(), FOC_LP_FAST_CONSTANT);
-  UTIL_LP_FAST(mCtrl.ipb_is, ADC_CURR_B(), FOC_LP_FAST_CONSTANT);
-  // mCtrl.ipa_is = ADC_CURR_A();
-  // mCtrl.ipb_is = ADC_CURR_B();
+  // UTIL_LP_FAST(mCtrl.ipa_is, ADC_CURR_A(), FOC_LP_FAST_CONSTANT);
+  // UTIL_LP_FAST(mCtrl.ipb_is, ADC_CURR_B(), FOC_LP_FAST_CONSTANT);
+  mCtrl.ipa_is = ADC_CURR_A();
+  mCtrl.ipb_is = ADC_CURR_B();
   mCtrl.ipc_is = -mCtrl.ipa_is -mCtrl.ipb_is;
   clark(&mCtrl.ipa_is, &mCtrl.ipb_is, &mCtrl.ipc_is, &mCtrl.ia_is, &mCtrl.ib_is); //1.727us
   runPositionObserver(dt); // 8.765us
