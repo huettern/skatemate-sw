@@ -7,6 +7,7 @@
 //#include <SoftwareSerial.h>  
 #include <avr/interrupt.h>
 #include <avr/io.h>
+#include <util/delay.h>
 
 #define MAX_CURRENT			  100	// ??????????? max current for PWM
 #define MIN_CURRENT			  0		// min Current for PWM
@@ -16,6 +17,7 @@
 #define LIMIT_LOW_CURRENT     50    // ??? switches from CV => OFF
 #define BALANCER_HYSTERESE    10    // Unterschied zwischen Min/Max Spannung 0,05V*(1024/5V)= 10,24
 #define PWM                   OCR0A
+#define BAUDRATE			  9600UL
 
 enum Routine{Battery, Charge_CC, Charge_CV, Balance, Shutdown}state;
 volatile unsigned int second=0;     //Timeout counter
@@ -120,11 +122,11 @@ int ADC_Read(int ch)
 void ReadCell(void){
         // Read
         cell[0]=ADC_Read(0);      
-        cell[1]=ADC_Read(1)*2-ADC_Read(0);     
-        cell[2]=ADC_Read(2)*3-ADC_Read(1)*2;
-        cell[3]=ADC_Read(3)*4-ADC_Read(2)*3;
-        cell[4]=ADC_Read(4)*5-ADC_Read(3)*4;
-        cell[5]=ADC_Read(5)*6-ADC_Read(4)*5;
+        cell[1]=(int)(ADC_Read(1)*2-ADC_Read(0));     
+        cell[2]=(int)(ADC_Read(2)*3.04-ADC_Read(1)*2.03);
+        cell[3]=(int)(ADC_Read(3)*4.02-ADC_Read(2)*3.04);
+        cell[4]=(int)(ADC_Read(4)*4.96-ADC_Read(3)*4.02);
+        cell[5]=(int)(ADC_Read(5)*6.15-ADC_Read(4)*4.96);
         
         current= ADC_Read(6); 
         inputVoltage= ADC_Read(7);
@@ -151,7 +153,7 @@ void ReadCell(void){
   }
   
 void Statemachine(){
-  static int old_Max = cell_Max;
+  int old_Max = cell_Max;
   static int kp;	//Regelung P Anteil
   static int ki;	//Regelung I Anteil
   
@@ -260,13 +262,95 @@ void init()
   state=Battery;      //  Start State            
 }
 
+ int uart_putc(const uint8_t c)
+ {
+	 // Warten, bis UDR bereit ist für einen neuen Wert
+	 while (!(UCSR0A & (1 << UDRE0)));
+	 // UDR Schreiben startet die Übertragung
+	 UDR0 = c;
+	 return 1;
+ }
+
+ int uart_putLine(char *c)
+ {
+	 for(int i = 0; i < strlen(c); i++)
+	 {
+		 uart_putc(c[i]);
+	 }
+	 uart_putc('\r');
+	 uart_putc('\n');
+	 return 1;
+ }
+
+ void USART_Init()
+ {
+	 uint16_t ubrr = (uint16_t) ((uint32_t) F_CPU/(16*BAUDRATE) - 1);
+	 /*Set baud rate to 9600 */
+	 UBRR0H = (uint8_t) (ubrr>>8);
+	 UBRR0L = (uint8_t) (ubrr);
+	 /*Enable receiver and transmitter */
+	 UCSR0B = (1<<RXEN0)|(1<<TXEN0);
+	 UCSR0A = (1<<UDRE0);
+	 /* Set frame format: 8data, 1stop bit */
+	 //UCSR0C = (1<<USBS0)|(3<<UCSZ00);
+	 UCSR0C = (1 << UMSEL01) | (1 << UCSZ01) | (1 << UCSZ00);    // Set frame: 8data, 1 stp
+ }
 
 
-int main(){
-  init();
-  while(1){
-    ReadCell();
-    Statemachine(); 
-  }
-  return 0;
-}
+ int main(){
+	 init();
+	 USART_Init();
+	 while(1){
+		 ReadCell();
+		 //Statemachine();
+		 PORTB |=(1<<0)| (1<<1);
+		 
+		 char buffer[5];
+		 while (!(UCSR0A & (1 << UDRE0)));
+		 /* Serial.print("State : ");
+		 Serial.println(statetext[state]);
+		 
+		 Serial.print("MAX   : ");
+		 Serial.print((double)cell_Max/204,8);
+		 Serial.print(" V (");
+		 Serial.print(cell_Max);
+		 Serial.println(")");
+		 
+		 Serial.print("MIN   : ");
+		 Serial.print((double)cell_Min/204,8);
+		 Serial.print(" V (");
+		 Serial.print(cell_Min);
+		 Serial.println(")");
+		 */
+		 static char *statetext[]={"BAT", "CCC", "CCV", "BAL", "SHT"};
+		 uart_putLine("=================================");
+		 uart_putLine("Zeit");
+		 uart_putLine(itoa(second,buffer,10));
+		 uart_putLine("PWM:");
+		 uart_putLine(itoa(((PWM*100)/256),buffer,10));
+		 uart_putLine("Min: ");
+		 uart_putLine(cell_Min);
+		 uart_putLine("MAX: ");
+		 uart_putLine(cell_Max);
+		 uart_putLine("State: ");
+		 uart_putLine(statetext[state]);
+		 
+		 uart_putLine("\nZelle 1:");
+		 uart_putLine(itoa(cell[0],buffer, 10));
+		 uart_putLine("Zelle 2:");
+		 uart_putLine(itoa(cell[1],buffer, 10));
+		 uart_putLine("Zelle 3:");
+		 uart_putLine(itoa(cell[2],buffer, 10));
+		 uart_putLine("Zelle 4:");
+		 uart_putLine(itoa(cell[3],buffer, 10));
+		 uart_putLine("Zelle 5:");
+		 uart_putLine(itoa(cell[4],buffer, 10));
+		 uart_putLine("Zelle 6:");
+		 uart_putLine(itoa(cell[5],buffer, 10));
+		 uart_putLine("\n\n");
+		 _delay_ms(500);
+		 PORTB&=~(0b11);	// Turn off LED1 and LED2
+		 _delay_ms(500);
+		 
+	 }
+ }
