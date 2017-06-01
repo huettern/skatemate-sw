@@ -60,7 +60,7 @@
 #define CTRL1_OCP_MODE_CURRENT_LIMIT  0x0000
 #define CTRL1_OCP_MODE_LATCH_SHUTDOWN 0x0010
 #define CTRL1_OCP_MODE_REPORT_ONLY    0x0020
-#define CTRL1_OCP_MODE_DISABLED       0x0040
+#define CTRL1_OCP_MODE_DISABLED       0x0030
 #define CTRL1_OC_ADJ_SET(x)           ((x<<6) & 0x07C0)
 
 // CTRL2 bits
@@ -108,7 +108,6 @@ static const SPIConfig hs_spicfg = {
  * SPI TX and RX buffers.
  */
 static uint8_t mtxbuf[4];
-static uint8_t mrxbuf[4];
 
 static uint16_t mSR1Value;
 
@@ -183,7 +182,7 @@ void drvInit(void)
   // Current amp have Gain 10
   // DC Calibration is turned off
   drvGateEnable();
-  chThdSleepMilliseconds(1); // Let the DRV power up
+  chThdSleepMilliseconds(50); // Let the DRV power up
 
   // Control register 1
   writePacket( DRV_SPI_CTRL1 |
@@ -206,9 +205,10 @@ void drvDumpStatus(void)
   uint16_t sr2, ctl1, ctl2;
   
   // Get all registers and mask out the data bits
+  mSR1Value = readPacket(DRV_SPI_SR1) & 0x07ff;
   sr2 = readPacket(DRV_SPI_SR2) & 0x07ff;
-  ctl1 = readPacket(DRV_SPI_CTRL1) & 0x0700;
-  ctl2 = readPacket(DRV_SPI_CTRL2) & 0x0700;
+  ctl1 = readPacket(DRV_SPI_CTRL1) & 0x07ff;
+  ctl2 = readPacket(DRV_SPI_CTRL2) & 0x07ff;
 
   DBG ("SR1      %04x\r\n\
 SR2      %04x\r\n\
@@ -249,7 +249,7 @@ drvFault_t drvGetFault(void)
  */
 static void writePacket(uint16_t data)
 {
-  uint16_t rx[2];
+  uint8_t rx[2];
   rx[0] = 0;
   rx[1] = 0;
   mtxbuf[0] = (data>>8) & 0x00ff;
@@ -273,7 +273,8 @@ static void writePacket(uint16_t data)
   spiReleaseBus(&DRV_SPI_DEVICE);
   // After a write the DRV always returns the SR1 value
   // Data is MSB first
-  mSR1Value = mrxbuf[1] | ((mrxbuf[0]<<8)&0xff00);
+  mSR1Value = rx[1] | ((rx[0]<<8)&0xff00);
+  mSR1Value &= 0x07ff;
 }
 /**
  * @brief      Read a register
@@ -284,7 +285,7 @@ static void writePacket(uint16_t data)
  */
 static uint16_t readPacket(uint16_t data)
 {
-  uint16_t rx[2];
+  uint8_t rx[2];
   rx[0] = 0;
   rx[1] = 0;
   data |= DRV_SPI_READ;
@@ -309,7 +310,7 @@ static uint16_t readPacket(uint16_t data)
   spiUnselect(&DRV_SPI_DEVICE);
   spiReleaseBus(&DRV_SPI_DEVICE);
   // Data is MSB first
-  return (rx[1] | ((rx[0]<<8)&0xff00));
+  return rx[1] | ((rx[0]<<8)&0xff00);
 }
 
 
