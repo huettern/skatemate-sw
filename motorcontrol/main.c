@@ -139,7 +139,10 @@ int main(void)
   mcfInit();
 
   chThdSleepMilliseconds(2000);
-  mcfSetForcedCommutationFrequency(4.285);
+  mcfSetForcedCommutationFrequency(-5.0);
+  chThdSleepMilliseconds(2000);
+  // mcfSetCurrentFactor(0.2);
+  // mcfSetDuty(900,900,900);
   while (true) 
   {
 

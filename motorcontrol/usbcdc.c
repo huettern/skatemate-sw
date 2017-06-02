@@ -166,6 +166,14 @@ static void cmd_duty(BaseSequentialStream *chp, int argc, char *argv[])
   if(argc<3) return;
   mcfSetDuty(atoi(argv[0]),atoi(argv[1]),atoi(argv[2]));
 }
+static void cmd_setcurr(BaseSequentialStream *chp, int argc, char *argv[])
+{
+  (void)chp;
+  (void)argc;
+  (void)argv;
+  if(argc<1) return;
+  mcfSetCurrent(stof(argv[0]));
+}
 static void cmd_sample(BaseSequentialStream *chp, int argc, char *argv[])
 {
   (void)chp;
@@ -239,6 +247,7 @@ static const ShellCommand commands[] = {
     {"release", cmd_release},
     {"sample", cmd_sample},
     {"volt", cmd_volt},
+    {"setcurr", cmd_setcurr},
 		{NULL, NULL}
 };
 

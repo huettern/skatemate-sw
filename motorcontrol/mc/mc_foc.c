@@ -47,8 +47,8 @@
 /* DEBUG                                                                     */
 /*===========================================================================*/
 // #define DEBUG_ADC
-//#define DEBUG_SVM
-#define DEBUG_OBSERVER
+#define DEBUG_SVM
+//#define DEBUG_OBSERVER
 //#define DEBUG_CONTROLLERS
 
 #define DEBUG_DOWNSAMPLE_FACTOR 10
@@ -90,13 +90,13 @@
 /**
  * Forced commutation settings
  */
-#define FOC_FORCED_COMM_FREQ -30.0
+#define FOC_FORCED_COMM_FREQ 30.0
 #define FOC_FORCED_COMM_VD 0.0
 #define FOC_FORCED_COMM_VQ 0.07
 /**
  * Maximum current
  */
-#define FOC_PARAM_DEFAULT_CURR_MAX 10.0
+#define FOC_PARAM_DEFAULT_CURR_MAX 50.0
 /**
  * is the abs value of the current factor below this value, the motor will be
  * released
@@ -109,7 +109,7 @@
 #define FOC_MOTOR_DEFAULT_PSI 15.0e-3 //0.008
 #define FOC_MOTOR_DEFAULT_P   7
 #define FOC_MOTOR_DEFAULT_LS  35.0e-6 //18.0e-6 // Lumenier: 12e-6
-#define FOC_MOTOR_DEFAULT_RS  20*0.04 // 1.2 // Lumenier: 0.06
+#define FOC_MOTOR_DEFAULT_RS  40*0.04 // 1.2 // Lumenier: 0.06
 #define FOC_MOTOR_DEFAULT_J   150e-6 // not used
 // vedder measured
 // #define FOC_MOTOR_DEFAULT_PSI 2.7e-3
@@ -127,11 +127,11 @@
 #define FOC_PARAM_DEFAULT_OBS_SPEED_ITERM_MAX  10.0
 #define FOC_PARAM_DEFAULT_OBS_SPEED_ITERM_MIN  -10.0
 
-#define FOC_PARAM_DEFAULT_CURR_D_KP   0.1
-#define FOC_PARAM_DEFAULT_CURR_D_KI   20.0
+#define FOC_PARAM_DEFAULT_CURR_D_KP   0.3
+#define FOC_PARAM_DEFAULT_CURR_D_KI   10.0
 
 #define FOC_PARAM_DEFAULT_CURR_Q_KP   0.3
-#define FOC_PARAM_DEFAULT_CURR_Q_KI   20.0
+#define FOC_PARAM_DEFAULT_CURR_Q_KI   10.0
 
 #define FOC_PARAM_DEFAULT_ITERM_CEIL     100.0
 #define FOC_PARAM_DEFAULT_ITERM_FLOOR    -100.0
@@ -221,7 +221,7 @@ static volatile uint16_t mADCValueStore[ADC_STORE_DEPTH][8]; // raw converted va
 static volatile uint8_t mStoreADC1, mStoreADC3;
 
 #ifdef DEBUG_OBSERVER
-  #define OBS_STORE_DEPTH 500
+  #define OBS_STORE_DEPTH 800
 #else
   #define OBS_STORE_DEPTH 1
 #endif
@@ -230,7 +230,7 @@ static volatile uint8_t mStoreObserver;
 static uint16_t mObsDebugCounter;
 
 #ifdef DEBUG_CONTROLLERS
-  #define CONT_STORE_DEPTH 200
+  #define CONT_STORE_DEPTH 800
 #else
   #define CONT_STORE_DEPTH 1
 #endif
@@ -353,8 +353,8 @@ static const usbcdcParameterStruct_t* mShellVars[] =
 /**
  * @brief      Returns the current in the shunt resister
  */
-#define ADC_CURR_A() ( ((float)mADCValue[ADC_CH_CURR_A]-mDrvOffA) * mADCtoAmpsFactor )
-#define ADC_CURR_B() ( ((float)mADCValue[ADC_CH_CURR_B]-mDrvOffB) * mADCtoAmpsFactor ) 
+#define ADC_CURR_A() ( ((float)mADCValue[ADC_CH_CURR_A]-mDrvOffA) * -mADCtoAmpsFactor )
+#define ADC_CURR_B() ( ((float)mADCValue[ADC_CH_CURR_B]-mDrvOffB) * -mADCtoAmpsFactor ) 
 #define ADC_STORE_CURR_A(i) ( ((float)mADCValueStore[i][ADC_CH_CURR_A]-mDrvOffA) * -mADCtoAmpsFactor )
 #define ADC_STORE_CURR_B(i) ( ((float)mADCValueStore[i][ADC_CH_CURR_B]-mDrvOffB) * -mADCtoAmpsFactor )
 /**
@@ -721,11 +721,11 @@ void mcfSetCurrentFactor(float in)
   }
   else
   {
-    if(mState == MC_HALT)
+    if(mState != MC_CLOSED_LOOP_CURRENT)
     {
       // factor is outside deadband but the motor is released
-      mState = MC_CLOSED_LOOP_CURRENT;
       mCtrl.iq_set = in * FOC_PARAM_DEFAULT_CURR_MAX;
+      mState = MC_CLOSED_LOOP_CURRENT;
       lockMotor();
     }
     else
@@ -734,6 +734,16 @@ void mcfSetCurrentFactor(float in)
       mCtrl.iq_set = in * FOC_PARAM_DEFAULT_CURR_MAX;
     }
   }
+}
+
+/**
+ * @brief      Set the current from min current to max current
+ *
+ * @param[in]  in    from -1.0 to 1.0
+ */
+void mcfSetCurrent(float in)
+{
+  mcfSetCurrentFactor(in* (1.0/FOC_PARAM_DEFAULT_CURR_MAX));
 }
 
 /**
@@ -1123,8 +1133,20 @@ static void drvDCCal(void)
  */
 static void svm (float* a, float* b, uint16_t* da, uint16_t* db, uint16_t* dc)
 {
-#define USE_VEDDER_SVM
+// #define USE_SINE_PWM
+//#define USE_VEDDER_SVM
+ #define USE_OWN_SVPWM
 
+#ifdef USE_SINE_PWM
+  float pa, pb, pc;
+  float pwmHalfPeriod = TIM1->ARR;
+
+  invclark(a, b, &pa, &pb, &pc);
+
+  *da = (uint16_t)(pwmHalfPeriod*(pa+0.5));
+  *db = (uint16_t)(pwmHalfPeriod*(pb+0.5));
+  *dc = (uint16_t)(pwmHalfPeriod*(pc+0.5));  
+#endif
 
 #ifdef USE_VEDDER_SVM
   uint32_t sector;
@@ -1259,10 +1281,11 @@ static void svm (float* a, float* b, uint16_t* da, uint16_t* db, uint16_t* dc)
   *tAout = tA;
   *tBout = tB;
   *tCout = tC;
+#endif
 
-#else
+#ifdef USE_OWN_SVPWM
   uint8_t sector;
-  float pwmHalfPeriod = TIM1->ARR;
+  float pwmHalfPeriod = (float)TIM1->ARR;
 
   float Ta, Tb, T0;
   float ta, tb, tc;
@@ -1270,7 +1293,9 @@ static void svm (float* a, float* b, uint16_t* da, uint16_t* db, uint16_t* dc)
   float va = *a;
   float vb = (*b)*ONE_BY_SQRT_3;
 
-  uint8_t kn = 1;
+  // uint8_t kn = 0; // 2 phase modulation clamp to low rail
+  float kn = 1; // 3 phase modulation
+  // uint8_t kn = 2; // 2 phase modulation clamp to high rail
 
   if(fabsf(va) >= fabsf(vb))
   {
@@ -1369,11 +1394,14 @@ static void lockMotor(void)
   mpiId.istate = 0.0;
   mpiIq.istate = 0.0;
   LED_GRN_ON();
+
   palSetPadMode(DRV_INH_A_PORT, DRV_INH_A_PIN, PAL_MODE_ALTERNATE(6) |
                            PAL_STM32_OSPEED_HIGHEST);
-  palSetPadMode(DRV_INH_B_PORT, DRV_INH_B_PIN, PAL_MODE_ALTERNATE(6) |
+  // palSetPadMode(DRV_INH_B_PORT, DRV_INH_B_PIN, PAL_MODE_ALTERNATE(6) |
+  //                          PAL_STM32_OSPEED_HIGHEST);
+  palSetPadMode(GPIOC, 1, PAL_MODE_ALTERNATE(2) |
                            PAL_STM32_OSPEED_HIGHEST);
-  palSetPadMode(DRV_INH_C_PORT, DRV_INH_C_PIN, PAL_MODE_ALTERNATE(6) |
+  palSetPadMode(GPIOC, 0, PAL_MODE_ALTERNATE(2) |
                            PAL_STM32_OSPEED_HIGHEST);
 
   palSetPadMode(DRV_INL_A_PORT, DRV_INL_A_PIN, PAL_MODE_ALTERNATE(4) |
@@ -1382,6 +1410,7 @@ static void lockMotor(void)
                            PAL_STM32_OSPEED_HIGHEST);
   palSetPadMode(DRV_INL_C_PORT, DRV_INL_C_PIN, PAL_MODE_ALTERNATE(6) |
                            PAL_STM32_OSPEED_HIGHEST);
+  
 }
 /**
  * @brief      Disables the highside FETs to release the motor in free drive
@@ -1393,10 +1422,12 @@ static void releaseMotor(void)
   LED_GRN_OFF();
   palSetPadMode(DRV_INH_A_PORT, DRV_INH_A_PIN, PAL_MODE_OUTPUT_PUSHPULL);
   palClearPad(DRV_INH_A_PORT, DRV_INH_A_PIN);
-  palSetPadMode(DRV_INH_B_PORT, DRV_INH_B_PIN, PAL_MODE_OUTPUT_PUSHPULL);
-  palClearPad(DRV_INH_B_PORT, DRV_INH_B_PIN);
-  palSetPadMode(DRV_INH_C_PORT, DRV_INH_C_PIN, PAL_MODE_OUTPUT_PUSHPULL);
-  palClearPad(DRV_INH_C_PORT, DRV_INH_C_PIN);
+  // palSetPadMode(DRV_INH_B_PORT, DRV_INH_B_PIN, PAL_MODE_OUTPUT_PUSHPULL);
+  // palClearPad(DRV_INH_B_PORT, DRV_INH_B_PIN);
+  palSetPadMode(GPIOC, 1, PAL_MODE_OUTPUT_PUSHPULL);
+  palClearPad(GPIOC, 1);
+  palSetPadMode(GPIOC, 0, PAL_MODE_OUTPUT_PUSHPULL);
+  palClearPad(GPIOC, 0);
 
   palSetPadMode(DRV_INL_A_PORT, DRV_INL_A_PIN, PAL_MODE_OUTPUT_PUSHPULL);
   palClearPad(DRV_INL_A_PORT, DRV_INL_A_PIN);
@@ -1467,7 +1498,7 @@ static void invclark (float* a, float* b, float* va, float* vb, float* vc)
   #else
     *va = *a;
     *vb = 1.0f / 2.0f * (-(*a) + SQRT_3*(*b));
-    *vc = 1.0f / 2.0f * (-(*a) + SQRT_3*(*b));
+    *vc = 1.0f / 2.0f * (-(*a) - SQRT_3*(*b));
   #endif
 }
 /**
@@ -1611,9 +1642,9 @@ static void runCurrentController (float* dt)
   mCtrl.vd_set = piController(&mpiId, d_err, dt);
   mCtrl.vq_set = piController(&mpiIq, q_err, dt);
 
-  mCtrl.vd_set -= mObs.omega_e * mMotParms.Ls * mCtrl.iq_is;
-  mCtrl.vq_set += mObs.omega_e * mMotParms.Ls * mCtrl.id_is;
-  mCtrl.vq_set += mObs.omega_e * 15e-3;
+  // mCtrl.vd_set -= mObs.omega_e * mMotParms.Ls * mCtrl.iq_is;
+  // mCtrl.vq_set += mObs.omega_e * mMotParms.Ls * mCtrl.id_is;
+  // mCtrl.vq_set += mObs.omega_e * 15e-3;
 
   mCtrl.vd_set *= 1.0 / ((2.0 / 3.0) * mCtrl.vsupply);
   mCtrl.vq_set *= 1.0 / ((2.0 / 3.0) * mCtrl.vsupply);
@@ -1750,7 +1781,6 @@ CH_IRQ_HANDLER(VectorFC) {
 
   CH_IRQ_PROLOGUE();
   chSysLockFromISR();
-
   ADC_ClearITPendingBit(ADC3, ADC_IT_EOS);
   ADC3->CR |= ADC_CR_ADSTART;
   ADC1->CR |= ADC_CR_ADSTART;
@@ -1782,11 +1812,11 @@ CH_IRQ_HANDLER(VectorFC) {
 
   if((mControllerDebugCtr < (CONT_STORE_DEPTH/3)) || (!mStoreController))
   {
-    // mCtrl.iq_set = 2.0;
+    // mCtrl.iq_set = 3.0; 
   }
   else
   {
-    // mCtrl.iq_set = 4.0;
+    // mCtrl.iq_set = 5.0;
   }
 
   if(++speedSlowDownCtr == FOC_SPEED_CONTROLLER_SLOWDOWN)

@@ -187,7 +187,7 @@ void drvInit(void)
   // Control register 1
   writePacket( DRV_SPI_CTRL1 |
     CTRL1_GATE_CURRENT_1_7_A | CTRL1_GATE_RESET_NORMAL | 
-    CTRL1_PWM_MODE_6_INPUT | CTRL1_OCP_MODE_CURRENT_LIMIT | CTRL1_OC_ADJ_SET(18)
+    CTRL1_PWM_MODE_6_INPUT | CTRL1_OCP_MODE_DISABLED | CTRL1_OC_ADJ_SET(18)
     );
   // Control register 2
   writePacket( DRV_SPI_CTRL2 |

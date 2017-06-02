@@ -108,6 +108,7 @@ void mcfSetDuty (uint16_t a, uint16_t b, uint16_t c);
 void mcfDumpData(void);
 void mcfStartSample(void);
 void mcfSetCurrentFactor(float in);
+void mcfSetCurrent(float in);
 void mcfSetForcedCommutationFrequency(float in);
 void mcfSetMotorLock(uint8_t in);
 
