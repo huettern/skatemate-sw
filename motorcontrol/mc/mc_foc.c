@@ -240,7 +240,7 @@ static uint16_t mControllerDebugCtr;
 static uint8_t mStartStore = 0;
 
 #ifdef DEBUG_SVM
-  #define SVM_STORE_DEPTH 800
+  #define SVM_STORE_DEPTH 1000
 #else
   #define SVM_STORE_DEPTH 1
 #endif
@@ -1134,7 +1134,7 @@ static void drvDCCal(void)
 static void svm (float* a, float* b, uint16_t* da, uint16_t* db, uint16_t* dc)
 {
 // #define USE_SINE_PWM
-//#define USE_VEDDER_SVM
+// #define USE_VEDDER_SVM
  #define USE_OWN_SVPWM
 
 #ifdef USE_SINE_PWM
@@ -1715,6 +1715,10 @@ static void runOutputsWithoutObserver(float theta)
   invpark(&mCtrl.vd_set, &mCtrl.vq_set, &theta, &mCtrl.va_set, &mCtrl.vb_set); // 5.5us
   // calculate duties
   utils_saturate_vector_2d(&mCtrl.va_set, &mCtrl.vb_set, SQRT_3_BY_2); //7.325us
+  // if(mCtrl.vb_set > 0.2)
+  // {
+  //   DBG3("vd=%f vq=%f theta=%f va=%f vb=%f\r\n", mCtrl.vd_set, mCtrl.vq_set, theta, mCtrl.va_set, mCtrl.vb_set);
+  // }
   svm(&mCtrl.va_set, &mCtrl.vb_set, &dutya, &dutyb, &dutyc); // 3.738us
   // set output
   TIMER_UPDATE_DUTY(dutyc, dutyb, dutya); // 0.993us
