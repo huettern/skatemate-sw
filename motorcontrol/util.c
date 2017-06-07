@@ -322,5 +322,25 @@ float stof(const char* s)
   return rez * fact;
 };
 
+/**
+ * @brief      Wraps an radial angle to fit inside [0 2pi]
+ *
+ * @param[in]  in    input angle
+ *
+ * @return     angle between 0 and 2pi
+ */
+float wrapAngle(float in)
+{
+  while (in < -PI) 
+  {
+    in += 2.0 * PI;
+  }
+  while (in >  PI) 
+  {
+    in -= 2.0 * PI;
+  }
+  return in;
+}
+
 /** @} */
 

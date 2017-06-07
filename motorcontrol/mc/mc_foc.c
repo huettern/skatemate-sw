@@ -47,8 +47,8 @@
 /* DEBUG                                                                     */
 /*===========================================================================*/
 // #define DEBUG_ADC
-#define DEBUG_SVM
-//#define DEBUG_OBSERVER
+//#define DEBUG_SVM
+#define DEBUG_OBSERVER
 //#define DEBUG_CONTROLLERS
 
 #define DEBUG_DOWNSAMPLE_FACTOR 10
@@ -96,7 +96,7 @@
 /**
  * Maximum current
  */
-#define FOC_PARAM_DEFAULT_CURR_MAX 50.0
+#define FOC_PARAM_DEFAULT_CURR_MAX 20.0
 /**
  * is the abs value of the current factor below this value, the motor will be
  * released
@@ -248,6 +248,9 @@ static volatile float mSVMValueStore[SVM_STORE_DEPTH][7];
 static volatile uint8_t mStoreSVM;
 static uint16_t mSVMDebugCtr;
 
+static char mIsrDbgString[80];
+#define DBGISR(X, ...) chsnprintf(mIsrDbgString, sizeof(mIsrDbgString), X, ##__VA_ARGS__ )
+
 static float mForcedCommFreq = 0;
 static float mForcedCommVd = 0;
 static float mForcedCommVq = 0;
@@ -386,7 +389,7 @@ static void runSpeedController (float dt);
 static void runCurrentController (float *dt);
 static void runOutputs(void);
 static void runOutputsWithoutObserver(float theta);
-static void forcedCommutation (void);
+static void forcedCommutation (float dt);
 
 /*===========================================================================*/
 /* Module public functions.                                                  */
@@ -872,6 +875,12 @@ static THD_FUNCTION(mcfocMainThread, arg) {
   while (true) 
   {
     chThdSleepMilliseconds(FOC_THREAD_INTERVAL);
+
+    if(mIsrDbgString[0] != 0)
+    {
+      DBG3("%s", mIsrDbgString);
+      mIsrDbgString[0] = 0;
+    }
 
     /**
      * Check driver status
@@ -1518,9 +1527,9 @@ static void invpark (float* d, float* q, float* theta, float* a, float* b)
     arm_sin_cos_f32(*theta, &sin, &cos);
     arm_inv_park_f32(*d, *q, a, b, sin, cos);
   #else
-    sin = arm_sin_f32(*theta);
-    cos = arm_cos_f32(*theta);
-    // sincos_fast(*theta, &sin, &cos);
+    // sin = arm_sin_f32(*theta);
+    // cos = arm_cos_f32(*theta);
+    sincos_fast(*theta, &sin, &cos);
     (*a) = (*d)*cos - (*q)*sin;
     (*b) = (*q)*cos + (*d)*sin;
   #endif
@@ -1642,9 +1651,9 @@ static void runCurrentController (float* dt)
   mCtrl.vd_set = piController(&mpiId, d_err, dt);
   mCtrl.vq_set = piController(&mpiIq, q_err, dt);
 
-  // mCtrl.vd_set -= mObs.omega_e * mMotParms.Ls * mCtrl.iq_is;
-  // mCtrl.vq_set += mObs.omega_e * mMotParms.Ls * mCtrl.id_is;
-  // mCtrl.vq_set += mObs.omega_e * 15e-3;
+  mCtrl.vd_set -= mObs.omega_e * mMotParms.Ls * mCtrl.iq_is;
+  mCtrl.vq_set += mObs.omega_e * mMotParms.Ls * mCtrl.id_is;
+  mCtrl.vq_set += mObs.omega_e * 15e-3;
 
   mCtrl.vd_set *= 1.0 / ((2.0 / 3.0) * mCtrl.vsupply);
   mCtrl.vq_set *= 1.0 / ((2.0 / 3.0) * mCtrl.vsupply);
@@ -1715,10 +1724,6 @@ static void runOutputsWithoutObserver(float theta)
   invpark(&mCtrl.vd_set, &mCtrl.vq_set, &theta, &mCtrl.va_set, &mCtrl.vb_set); // 5.5us
   // calculate duties
   utils_saturate_vector_2d(&mCtrl.va_set, &mCtrl.vb_set, SQRT_3_BY_2); //7.325us
-  // if(mCtrl.vb_set > 0.2)
-  // {
-  //   DBG3("vd=%f vq=%f theta=%f va=%f vb=%f\r\n", mCtrl.vd_set, mCtrl.vq_set, theta, mCtrl.va_set, mCtrl.vb_set);
-  // }
   svm(&mCtrl.va_set, &mCtrl.vb_set, &dutya, &dutyb, &dutyc); // 3.738us
   // set output
   TIMER_UPDATE_DUTY(dutyc, dutyb, dutya); // 0.993us
@@ -1726,15 +1731,14 @@ static void runOutputsWithoutObserver(float theta)
 /**
  * @brief      Runs output in forced commutation mode
  */
-static void forcedCommutation (void)
+static void forcedCommutation (float dt)
 {
-  static float t = 0.0;
   static float theta;
 
-  theta = 2*PI*mForcedCommFreq*(t); //800ns
+  theta += 2*PI*mForcedCommFreq*dt;
+  theta = wrapAngle(theta);
   mCtrl.vd_set = mForcedCommVd;
   mCtrl.vq_set = mForcedCommVq;
-  t += ((float)FOC_CURRENT_CONTROLLER_SLOWDOWN / FOC_F_SW);
   runOutputsWithoutObserver(theta);
 }
 
@@ -1869,7 +1873,7 @@ CH_IRQ_HANDLER(VectorFC) {
     }
     else if(mState == MC_OPEN_LOOP)
     {
-      forcedCommutation();
+      forcedCommutation(dtcurrent);
     }
     else
     {

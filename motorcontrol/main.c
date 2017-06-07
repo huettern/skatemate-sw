@@ -140,7 +140,7 @@ int main(void)
 
   chThdSleepMilliseconds(2000);
   mcfSetForcedCommutationFrequency(-5.0);
-  // chThdSleepMilliseconds(2000);
+  chThdSleepMilliseconds(2000);
   // mcfSetCurrentFactor(0.2);
   // mcfSetDuty(900,900,900);
   while (true) 
@@ -164,7 +164,7 @@ int main(void)
       input_val = ((float)last_width - PWM_IN_MID)/((float)PWM_IN_HIGH - PWM_IN_MID);
       if(input_val > 1.0) input_val = 1.0;
       if(input_val < -1.0) input_val = -1.0;
-      // mcfSetCurrentFactor(input_val);
+      mcfSetCurrentFactor(input_val);
       ctr = 0;
     }
     
