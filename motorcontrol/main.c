@@ -165,6 +165,7 @@ int main(void)
       if(input_val > 1.0) input_val = 1.0;
       if(input_val < -1.0) input_val = -1.0;
       mcfSetCurrentFactor(input_val);
+  // mcfSetForcedCommutationFrequency(10*input_val);
       ctr = 0;
     }
     

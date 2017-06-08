@@ -234,6 +234,7 @@ drvFault_t drvGetFault(void)
   uint16_t sr2;
   drvFault_t faults;
   // Get all registers and mask out the data bits
+  mSR1Value = readPacket(DRV_SPI_SR1) & 0x07ff;
   sr2 = readPacket(DRV_SPI_SR2) & 0x07ff;
   faults = mSR1Value | ((sr2 & 0x0080) << 3);
   return faults;

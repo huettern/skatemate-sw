@@ -48,8 +48,8 @@
 /*===========================================================================*/
 // #define DEBUG_ADC
 //#define DEBUG_SVM
-#define DEBUG_OBSERVER
-//#define DEBUG_CONTROLLERS
+//#define DEBUG_OBSERVER
+#define DEBUG_CONTROLLERS
 
 #define DEBUG_DOWNSAMPLE_FACTOR 10
 
@@ -109,7 +109,7 @@
 #define FOC_MOTOR_DEFAULT_PSI 15.0e-3 //0.008
 #define FOC_MOTOR_DEFAULT_P   7
 #define FOC_MOTOR_DEFAULT_LS  35.0e-6 //18.0e-6 // Lumenier: 12e-6
-#define FOC_MOTOR_DEFAULT_RS  40*0.04 // 1.2 // Lumenier: 0.06
+#define FOC_MOTOR_DEFAULT_RS  0.1 // 0.04 // 1.2 // Lumenier: 0.06
 #define FOC_MOTOR_DEFAULT_J   150e-6 // not used
 // vedder measured
 // #define FOC_MOTOR_DEFAULT_PSI 2.7e-3
@@ -127,11 +127,14 @@
 #define FOC_PARAM_DEFAULT_OBS_SPEED_ITERM_MAX  10.0
 #define FOC_PARAM_DEFAULT_OBS_SPEED_ITERM_MIN  -10.0
 
-#define FOC_PARAM_DEFAULT_CURR_D_KP   0.3
-#define FOC_PARAM_DEFAULT_CURR_D_KI   10.0
-
-#define FOC_PARAM_DEFAULT_CURR_Q_KP   0.3
-#define FOC_PARAM_DEFAULT_CURR_Q_KI   10.0
+// #define FOC_PARAM_DEFAULT_CURR_D_KP   0.3
+// #define FOC_PARAM_DEFAULT_CURR_D_KI   10.0
+// #define FOC_PARAM_DEFAULT_CURR_Q_KP   0.3
+// #define FOC_PARAM_DEFAULT_CURR_Q_KI   10.0
+#define FOC_PARAM_DEFAULT_CURR_D_KP   0.01
+#define FOC_PARAM_DEFAULT_CURR_D_KI   0.0
+#define FOC_PARAM_DEFAULT_CURR_Q_KP   0.01
+#define FOC_PARAM_DEFAULT_CURR_Q_KI   0.0
 
 #define FOC_PARAM_DEFAULT_ITERM_CEIL     100.0
 #define FOC_PARAM_DEFAULT_ITERM_FLOOR    -100.0
@@ -356,10 +359,10 @@ static const usbcdcParameterStruct_t* mShellVars[] =
 /**
  * @brief      Returns the current in the shunt resister
  */
-#define ADC_CURR_A() ( ((float)mADCValue[ADC_CH_CURR_A]-mDrvOffA) * -mADCtoAmpsFactor )
-#define ADC_CURR_B() ( ((float)mADCValue[ADC_CH_CURR_B]-mDrvOffB) * -mADCtoAmpsFactor ) 
-#define ADC_STORE_CURR_A(i) ( ((float)mADCValueStore[i][ADC_CH_CURR_A]-mDrvOffA) * -mADCtoAmpsFactor )
-#define ADC_STORE_CURR_B(i) ( ((float)mADCValueStore[i][ADC_CH_CURR_B]-mDrvOffB) * -mADCtoAmpsFactor )
+#define ADC_CURR_A() ( ((float)mADCValue[ADC_CH_CURR_A]-mDrvOffA) * mADCtoAmpsFactor )
+#define ADC_CURR_B() ( ((float)mADCValue[ADC_CH_CURR_B]-mDrvOffB) * mADCtoAmpsFactor ) 
+#define ADC_STORE_CURR_A(i) ( ((float)mADCValueStore[i][ADC_CH_CURR_A]-mDrvOffA) * mADCtoAmpsFactor )
+#define ADC_STORE_CURR_B(i) ( ((float)mADCValueStore[i][ADC_CH_CURR_B]-mDrvOffB) * mADCtoAmpsFactor )
 /**
  * @brief      Returns the current temperature
  */
@@ -381,7 +384,9 @@ static void clark (float* va, float* vb, float* vc, float* a, float* b);
 static void park (float* a, float* b, float* theta, float* d, float* q );
 static void invclark (float* a, float* b, float* va, float* vb, float* vc);
 static void invpark (float* d, float* q, float* theta, float* a, float* b);
+
 static float piController(piStruct_t* s, float sample, float* dt);
+static void deadtimeComp (float* alpha, float* beta);
 
 static void runPositionObserver(float dt);
 static void runSpeedObserver (float dt);
@@ -783,7 +788,9 @@ void mcfSetForcedCommutationFrequency(float in)
     mForcedCommFreq = in * mMotParms.p;
     mState = MC_OPEN_LOOP;
     lockMotor();
+    return;
   }
+  mForcedCommFreq = in * mMotParms.p;
 }
 
 /**
@@ -891,37 +898,38 @@ static THD_FUNCTION(mcfocMainThread, arg) {
     if(drvIsFault())
     {
       DBG3("-----DRV FAULT-----\r\n");
-      // drvFaults = drvGetFault();
-      if(drvFaults | DRV_FLT_FET_MASK)
-      { 
-        redLedBlinkPattern = 1;
-        DBG3("FET overcurrent\r\n");
-      }
-      if(drvFaults | DRV_FLT_OTW)
-      {
-        redLedBlinkPattern = 2;
-        DBG3("Overtemp Warning\r\n");
-      }
-      if(drvFaults | DRV_FLT_OTSD)
-      {
-        redLedBlinkPattern = 3;
-        DBG3("Overtemp\r\n");
-      }
-      if(drvFaults | DRV_FLT_PVDD_UV)
-      {
-        redLedBlinkPattern = 4;
-        DBG3("PVDD Untervolt\r\n");
-      }
-      if(drvFaults | DRV_FLT_GVDD_UV)
-      {
-        redLedBlinkPattern = 5;
-        DBG3("GVDD Undervolt\r\n");
-      }
-      if(drvFaults | DRV_FLT_GVDD_OV)
-      {
-        redLedBlinkPattern = 6;
-        DBG3("GVDD Overvolt\r\n");
-      }
+      drvFaults = drvGetFault();
+      DBG3("code: %d\r\n", drvFaults);
+      // if(drvFaults & DRV_FLT_FET_MASK)
+      // { 
+      //   redLedBlinkPattern = 1;
+      //   DBG3("FET overcurrent\r\n");
+      // }
+      // if(drvFaults & DRV_FLT_OTW)
+      // {
+      //   redLedBlinkPattern = 2;
+      //   DBG3("Overtemp Warning\r\n");
+      // }
+      // if(drvFaults & DRV_FLT_OTSD)
+      // {
+      //   redLedBlinkPattern = 3;
+      //   DBG3("Overtemp\r\n");
+      // }
+      // if(drvFaults & DRV_FLT_PVDD_UV)
+      // {
+      //   redLedBlinkPattern = 4;
+      //   DBG3("PVDD Untervolt\r\n");
+      // }
+      // if(drvFaults & DRV_FLT_GVDD_UV)
+      // {
+      //   redLedBlinkPattern = 5;
+      //   DBG3("GVDD Undervolt\r\n");
+      // }
+      // if(drvFaults & DRV_FLT_GVDD_OV)
+      // {
+      //   redLedBlinkPattern = 6;
+      //   DBG3("GVDD Overvolt\r\n");
+      // }
     }
     else
     {
@@ -1653,7 +1661,7 @@ static void runCurrentController (float* dt)
 
   mCtrl.vd_set -= mObs.omega_e * mMotParms.Ls * mCtrl.iq_is;
   mCtrl.vq_set += mObs.omega_e * mMotParms.Ls * mCtrl.id_is;
-  mCtrl.vq_set += mObs.omega_e * 15e-3;
+  mCtrl.vq_set += mObs.omega_e * mMotParms.psi;
 
   mCtrl.vd_set *= 1.0 / ((2.0 / 3.0) * mCtrl.vsupply);
   mCtrl.vq_set *= 1.0 / ((2.0 / 3.0) * mCtrl.vsupply);
@@ -1681,6 +1689,27 @@ static void runCurrentController (float* dt)
 #endif
 }
 
+static void deadtimeComp (float* alpha, float* beta)
+{
+  // Deadtime compensation
+  const float deadtime = FOC_PWM_DEADTIME_CYCLES * (1.0/APB2_CLOCK);
+  const float ia_set = (*alpha);
+  const float ib_set = -0.5 * (*alpha) + SQRT_3_BY_2 * (*beta);
+  const float ic_set = -0.5 * (*alpha) - SQRT_3_BY_2 * (*beta);
+  const float mod_alpha_set_sgn = (2.0 / 3.0) * SIGN(ia_set) - (1.0 / 3.0) * SIGN(ib_set) - (1.0 / 3.0) * SIGN(ic_set);
+  const float mod_beta_set_sgn = ONE_BY_SQRT_3 * SIGN(ib_set) - ONE_BY_SQRT_3 * SIGN(ic_set);
+  const float mod_comp_fact = deadtime * FOC_F_SW;
+  const float mod_alpha_comp = mod_alpha_set_sgn * mod_comp_fact;
+  const float mod_beta_comp = mod_beta_set_sgn * mod_comp_fact;
+
+//  mod_alpha += mod_alpha_comp;
+//  mod_beta += mod_beta_comp;
+
+  // Apply compensation here so that 0 duty cyle has no glitches.
+  *alpha = ((*alpha) - mod_alpha_comp) * (2.0 / 3.0) * mCtrl.vsupply;
+  *beta  = ((*beta) - mod_beta_comp) * (2.0 / 3.0) * mCtrl.vsupply;
+}
+
 /**
  * @brief      Calculate output vectors for the Timer and sets new dutycycle
  * @note       Needs
@@ -1696,6 +1725,8 @@ static void runOutputs(void)
   uint16_t dutya, dutyb, dutyc;
   // inverse transform
   invpark(&mCtrl.vd_set, &mCtrl.vq_set, &mObs.theta, &mCtrl.va_set, &mCtrl.vb_set);
+  // run daedtime compensation
+  // deadtimeComp(&mCtrl.va_set, &mCtrl.vb_set);
   // calculate duties
   utils_saturate_vector_2d(&mCtrl.va_set, &mCtrl.vb_set, SQRT_3_BY_2);
   svm(&mCtrl.va_set, &mCtrl.vb_set, &dutya, &dutyb, &dutyc);

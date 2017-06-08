@@ -48,6 +48,7 @@
  */
 #define UTIL_LP_FAST(value, sample, filter_constant) (value -= (filter_constant) * (value - (sample)))
 
+#define SIGN(x) ((x<0)?-1:1)
 /*===========================================================================*/
 /* UTIL public functions.                                                    */
 /*===========================================================================*/
