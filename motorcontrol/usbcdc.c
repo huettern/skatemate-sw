@@ -26,6 +26,8 @@
 #include "shell.h"
 #include "defs.h"
 #include "util.h"
+#include "drv8301.h"
+#include "mc_foc.h"
 
 #include "chprintf.h"
 
@@ -52,6 +54,8 @@
 /*===========================================================================*/
 static thread_t *shelltp = NULL;
 static THD_WORKING_AREA(shellWA, DEFS_THD_SHELL_WA_SIZE);
+
+static const usbcdcParameterStruct_t** mShellVars;
 
 /*===========================================================================*/
 /* Module static functions.                                                  */
@@ -116,7 +120,7 @@ static void cmd_threads(BaseSequentialStream *chp, int argc, char *argv[]) {
     chprintf(chp, "Usage: threads\r\n");
     return;
   }
-  chprintf(chp, "    addr    stack prio   state    time      wa_size     free name\r\n");
+  chprintf(chp, "    addr    stack prio     state     time     wa_size     free name\r\n");
   tp = chRegFirstThread();
   do {
     chprintf(chp, "%08lx %08lx %4lu %9s %8lu %11lu %8lu %s\r\n",
@@ -133,14 +137,117 @@ static void cmd_threads(BaseSequentialStream *chp, int argc, char *argv[]) {
   chprintf(chp, "Overall CPU usge is %.1f%%\r\n", (float)time/(float)idletime*100.0);
   
 }
+static void cmd_drv(BaseSequentialStream *chp, int argc, char *argv[])
+{
+  (void)chp;
+  (void)argc;
+  (void)argv;
+  drvDumpStatus();
+}
+static void cmd_drvon(BaseSequentialStream *chp, int argc, char *argv[])
+{
+  (void)chp;
+  (void)argc;
+  (void)argv;
+  drvGateEnable();
+}
+static void cmd_drvoff(BaseSequentialStream *chp, int argc, char *argv[])
+{
+  (void)chp;
+  (void)argc;
+  (void)argv;
+  drvGateDisable();
+}
+static void cmd_duty(BaseSequentialStream *chp, int argc, char *argv[])
+{
+  (void)chp;
+  (void)argc;
+  (void)argv;
+  if(argc<3) return;
+  mcfSetDuty(atoi(argv[0]),atoi(argv[1]),atoi(argv[2]));
+}
+static void cmd_setcurr(BaseSequentialStream *chp, int argc, char *argv[])
+{
+  (void)chp;
+  (void)argc;
+  (void)argv;
+  if(argc<1) return;
+  mcfSetCurrent(stof(argv[0]));
+}
+static void cmd_sample(BaseSequentialStream *chp, int argc, char *argv[])
+{
+  (void)chp;
+  (void)argc;
+  (void)argv;
+  mcfStartSample();
+}
+static void cmd_lock(BaseSequentialStream *chp, int argc, char *argv[])
+{
+  (void)chp;
+  (void)argc;
+  (void)argv;
+  mcfSetMotorLock(1);
+}
+static void cmd_release(BaseSequentialStream *chp, int argc, char *argv[])
+{
+  (void)chp;
+  (void)argc;
+  (void)argv;
+  mcfSetMotorLock(0);
+}
+static void cmd_volt(BaseSequentialStream *chp, int argc, char *argv[])
+{
+  (void)chp;
+  (void)argc;
+  (void)argv;
+  mcfDumpData();
+}
 
 
+static void cmd_get(BaseSequentialStream *chp, int argc, char *argv[])
+{
+  (void)argc;
+  (void)argv;
+  uint8_t ctr;
+  for(ctr = 0; mShellVars[ctr] != NULL; ctr++)
+  {
+    chprintf(chp, "%s = %.3f\r\n", mShellVars[ctr]->name, *mShellVars[ctr]->loc);
+  }
+}
+static void cmd_set(BaseSequentialStream *chp, int argc, char *argv[])
+{
+  (void)chp;
+  (void)argc;
+  (void)argv;
+  uint8_t ctr;
+  for(ctr = 0; mShellVars[ctr] != NULL; ctr++)
+  {
+    if(strcmp(mShellVars[ctr]->name, argv[0]) == 0)
+    {
+      (*mShellVars[ctr]->loc) = stof(argv[1]);
+      chprintf(chp, "%s = %.3f\r\n", mShellVars[ctr]->name, *mShellVars[ctr]->loc);
+      return;
+    }
+  }
+  chprintf(chp, "%s not found\r\n", argv[0]);
+}
 /**
  * List of shell commands
  */
 static const ShellCommand commands[] = {
 		{"mem", cmd_mem},
-		{"threads", cmd_threads},
+    {"threads", cmd_threads},
+    {"drv", cmd_drv},
+    {"drvon", cmd_drvon},
+    {"drvoff", cmd_drvoff},
+    {"duty", cmd_duty},
+    {"get", cmd_get},
+    {"set", cmd_set},
+    {"lock", cmd_lock},
+    {"release", cmd_release},
+    {"sample", cmd_sample},
+    {"volt", cmd_volt},
+    {"setcurr", cmd_setcurr},
 		{NULL, NULL}
 };
 
@@ -148,7 +255,7 @@ static const ShellCommand commands[] = {
  * shell configuration
  */
 static const ShellConfig shell_cfg1 = {
-		(BaseSequentialStream *)&SDU1,
+		(BaseSequentialStream *)&DEFS_SHELL_STREAM,
 		commands
 };
 
@@ -159,7 +266,8 @@ static const ShellConfig shell_cfg1 = {
  * @brief      Handle the shell, must be called periodically
  */
 void usbcdcHandleShell(void) {
-	if (!shelltp && (SDU1.config->usbp->state == USB_ACTIVE))
+  // if (!shelltp && (DEFS_SHELL_STREAM.config->usbp->state == USB_ACTIVE))
+  if (!shelltp)
       // shelltp = shellCreate(&shell_cfg1, SHELL_WA_SIZE, NORMALPRIO);
       shelltp = shellCreateStatic(&shell_cfg1, shellWA, sizeof(shellWA), NORMALPRIO);
     else if (chThdTerminatedX(shelltp)) {
@@ -187,7 +295,13 @@ void usbcdcInit(void) {
   // chThdSleepMilliseconds(1500);
   usbStart(serusbcfg.usbp, &usbcfg);
   usbConnectBus(serusbcfg.usbp);
-  
 }
+
+void usbcdcSetShellVars(const usbcdcParameterStruct_t** vars)
+{
+  mShellVars = vars;
+}
+
+
 
 /** @} */

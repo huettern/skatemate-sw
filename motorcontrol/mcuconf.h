@@ -39,17 +39,17 @@
 #define STM32_NO_INIT                       FALSE
 #define STM32_PVD_ENABLE                    FALSE
 #define STM32_PLS                           STM32_PLS_LEV0
-#define STM32_HSI_ENABLED                   TRUE
-#define STM32_LSI_ENABLED                   TRUE
+#define STM32_HSI_ENABLED                   TRUE // TODO: turn off
+#define STM32_LSI_ENABLED                   TRUE // TODO: turn off
 #define STM32_HSE_ENABLED                   TRUE
 #define STM32_LSE_ENABLED                   FALSE
-#define STM32_SW                            STM32_SW_PLL
+#define STM32_SW                            STM32_SW_PLL // SYSCLK source is PLL
 #define STM32_PLLSRC                        STM32_PLLSRC_HSE
-#define STM32_PREDIV_VALUE                  1
-#define STM32_PLLMUL_VALUE                  9
-#define STM32_HPRE                          STM32_HPRE_DIV1
-#define STM32_PPRE1                         STM32_PPRE1_DIV2
-#define STM32_PPRE2                         STM32_PPRE2_DIV2
+#define STM32_PREDIV_VALUE                  1 // PLL input prescaler for HSE clock soure
+#define STM32_PLLMUL_VALUE                  9 // Multiply PLL input clock by this factor
+#define STM32_HPRE                          STM32_HPRE_DIV1 // HCLK = AHB clock is SYSCLK divided by 1
+#define STM32_PPRE1                         STM32_PPRE1_DIV2 // APB1 is HCLK divided by 2
+#define STM32_PPRE2                         STM32_PPRE2_DIV2 // APB2 is HCLK divided by 2
 #define STM32_MCOSEL                        STM32_MCOSEL_NOCLOCK
 #define STM32_ADC12PRES                     STM32_ADC12PRES_DIV1
 #define STM32_ADC34PRES                     STM32_ADC34PRES_DIV1
@@ -165,7 +165,7 @@
  */
 #define STM32_ICU_USE_TIM1                  FALSE
 #define STM32_ICU_USE_TIM2                  FALSE
-#define STM32_ICU_USE_TIM3                  FALSE
+#define STM32_ICU_USE_TIM3                  TRUE
 #define STM32_ICU_USE_TIM4                  FALSE
 #define STM32_ICU_USE_TIM8                  FALSE
 #define STM32_ICU_TIM1_IRQ_PRIORITY         7
@@ -194,7 +194,7 @@
  */
 #define STM32_SERIAL_USE_USART1             FALSE
 #define STM32_SERIAL_USE_USART2             FALSE
-#define STM32_SERIAL_USE_USART3             FALSE
+#define STM32_SERIAL_USE_USART3             TRUE
 #define STM32_SERIAL_USE_UART4              FALSE
 #define STM32_SERIAL_USE_UART5              FALSE
 #define STM32_SERIAL_USART1_PRIORITY        12
@@ -208,7 +208,7 @@
  */
 #define STM32_SPI_USE_SPI1                  FALSE
 #define STM32_SPI_USE_SPI2                  FALSE
-#define STM32_SPI_USE_SPI3                  FALSE
+#define STM32_SPI_USE_SPI3                  TRUE
 #define STM32_SPI_SPI1_DMA_PRIORITY         1
 #define STM32_SPI_SPI2_DMA_PRIORITY         1
 #define STM32_SPI_SPI3_DMA_PRIORITY         1

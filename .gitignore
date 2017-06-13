@@ -2,7 +2,6 @@
 # Created by https://www.gitignore.io/api/c,c++,sublimetext,eclipse,macos,windows,assembler
 
 ### Assembler ###
-*.[sS]
 *.bc
 
 ### C ###
@@ -221,3 +220,6 @@ $RECYCLE.BIN/
 *.lst
 *.bin
 *.dmp
+
+# User
+motorcontrol/doc/*

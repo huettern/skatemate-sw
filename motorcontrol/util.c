@@ -22,6 +22,8 @@
 #include <string.h>
 #include <ctype.h>
 #include <stdlib.h>
+#include <math.h>
+#include "arm_math.h"
 
 /*===========================================================================*/
 /* Module public functions.                                                  */
@@ -126,7 +128,219 @@ size_t getThdWaSize(thread_t *tp)
   return 0;
 }
 
+/**
+ * @brief      fast atan2 calculation
+ * @note       See http://www.dspguru.com/dsp/tricks/fixed-point-atan2-with-self-normalization
+ *
+ * @param[in]  y     y
+ * @param[in]  x     x
+ *
+ * @return     atan2(y,x)
+ */
+float utilFastAtan2(float y, float x) {
+  float abs_y = fabsf(y) + 1e-10; // kludge to prevent 0/0 condition
+  float angle, r, rsq;
 
+  if (x >= 0) {
+    r = (x - abs_y) / (x + abs_y);
+    rsq = r * r;
+    angle = ((0.1963 * rsq) - 0.9817) * r + (PI / 4.0);
+  } else {
+    r = (x + abs_y) / (abs_y - x);
+    rsq = r * r;
+    angle = ((0.1963 * rsq) - 0.9817) * r + (3.0 * PI / 4.0);
+  }
+
+  if (y < 0) {
+    return(-angle);
+  } else {
+    return(angle);
+  }
+}
+
+/**
+ * @brief      Truncate the magnitude of a vector.
+ * @note       Duration 7.325us
+ *
+ * @param x   The first component.
+ * @param y   The second component.
+ * @param max The maximum magnitude.
+ *
+ * @return True if saturation happened, false otherwise
+ */
+bool utils_saturate_vector_2d(float *x, float *y, float max) 
+{
+  bool retval = false;
+  float mag = sqrtf(*x * *x + *y * *y);
+  // arm_sqrt_f32(*x * *x + *y * *y, &mag);
+  max = fabsf(max);
+
+  if (mag < 1e-10) 
+  {
+    mag = 1e-10;
+  }
+
+  if (mag > max) 
+  {
+    const float f = max / mag;
+    *x *= f;
+    *y *= f;
+    retval = true;
+  }
+
+  return retval;
+}
+
+/**
+ * @brief      Make sure that -pi <= angle < pi,
+ *
+ * @param      angle  The angle
+ */
+void utils_norm_angle_rad(float *angle) 
+{
+  while (*angle < -PI) 
+  {
+    *angle += 2.0 * PI;
+  }
+
+  while (*angle >  PI) 
+  {
+    *angle -= 2.0 * PI;
+  }
+}
+
+/**
+ * @brief      Fast sine and cosine implementation.
+ * @note       See http://lab.polygonal.de/?p=205
+ * @note       WARNING: Don't use too large angles.
+ *
+ * @param[in]  angle  The angle in radians
+ * @param      sin    The sine in radians
+ * @param      cos    The cosine in radians
+ */
+void sincos_fast(float angle, float *sin, float *cos)
+{
+  //always wrap input angle to -PI..PI
+  while (angle < -PI) 
+  {
+    angle += 2.0 * PI;
+  }
+  while (angle >  PI) 
+  {
+    angle -= 2.0 * PI;
+  }
+
+  //compute sine
+  if (angle < 0.0) 
+  {
+    *sin = 1.27323954 * angle + 0.405284735 * angle * angle;
+
+    if (*sin < 0.0) 
+    {
+      *sin = 0.225 * (*sin * -*sin - *sin) + *sin;
+    } else 
+    {
+      *sin = 0.225 * (*sin * *sin - *sin) + *sin;
+    }
+  } 
+  else 
+  {
+    *sin = 1.27323954 * angle - 0.405284735 * angle * angle;
+
+    if (*sin < 0.0) 
+    {
+      *sin = 0.225 * (*sin * -*sin - *sin) + *sin;
+    } 
+    else 
+    {
+      *sin = 0.225 * (*sin * *sin - *sin) + *sin;
+    }
+  }
+
+  // compute cosine: sin(x + PI/2) = cos(x)
+  angle += 0.5 * PI;
+  if (angle >  PI) 
+  {
+    angle -= 2.0 * PI;
+  }
+
+  if (angle < 0.0) 
+  {
+    *cos = 1.27323954 * angle + 0.405284735 * angle * angle;
+
+    if (*cos < 0.0) 
+    {
+      *cos = 0.225 * (*cos * -*cos - *cos) + *cos;
+    } 
+    else 
+    {
+      *cos = 0.225 * (*cos * *cos - *cos) + *cos;
+    }
+  } else 
+  {
+    *cos = 1.27323954 * angle - 0.405284735 * angle * angle;
+
+    if (*cos < 0.0) 
+    {
+      *cos = 0.225 * (*cos * -*cos - *cos) + *cos;
+    } 
+    else 
+    {
+      *cos = 0.225 * (*cos * *cos - *cos) + *cos;
+    }
+  }
+}
+/**
+ * @brief      Simple string to float conversion
+ *
+ * @param[in]  s     string
+ *
+ * @return     float value
+ */
+float stof(const char* s)
+{
+  float rez = 0, fact = 1;
+  if (*s == '-')
+  {
+    s++;
+    fact = -1;
+  }
+  for (int point_seen = 0; *s; s++)
+  {
+    if (*s == '.')
+    {
+      point_seen = 1; 
+      continue;
+    }
+    int d = *s - '0';
+    if (d >= 0 && d <= 9)
+    {
+      if (point_seen) fact /= 10.0f;
+      rez = rez * 10.0f + (float)d;
+    }
+  }
+  return rez * fact;
+};
+
+/**
+ * @brief      Wraps an radial angle to fit inside [0 2pi]
+ *
+ * @param[in]  in    input angle
+ *
+ * @return     angle between 0 and 2pi
+ */
+float wrapAngle(float in)
+{
+  while (in < -PI) 
+  {
+    in += 2.0 * PI;
+  }
+  while (in >  PI) 
+  {
+    in -= 2.0 * PI;
+  }
+  return in;
+}
 
 /** @} */
 

@@ -30,8 +30,12 @@
  */
 static const utlmMeasurement_t utlmMeasurements[] = 
 {
-  {0, "Voltage", "Volt", utlm_uint8, utlm_uint8},
-  {1, "Current", "Amp", utlm_uint64, utlm_float}
+  {0, "ph_a", "volt", utlm_uint64, utlm_float},
+  {1, "ph_b", "volt", utlm_uint64, utlm_float},
+  {2, "ph_c", "volt", utlm_uint64, utlm_float},
+  {3, "suppl", "volt", utlm_uint64, utlm_float},
+  {4, "cur_a", "amp", utlm_uint64, utlm_float},
+  {5, "cur_b", "amp", utlm_uint64, utlm_float},
 };
 static const int mNumMeasurements = sizeof(utlmMeasurements) / sizeof(utlmMeasurement_t);
 
@@ -43,7 +47,8 @@ static const int mNumMeasurements = sizeof(utlmMeasurements) / sizeof(utlmMeasur
  *
  * @return     none
  */
-#define DEF_WRITE(dat, n) chSequentialStreamWrite(bssusb,(const uint8_t*)dat,n)
+// #define DEF_WRITE(dat, n) chSequentialStreamWrite(bssusb,(const uint8_t*)dat,n)
+#define DEF_WRITE(dat, n) sdWrite(&SD3, (uint8_t *) dat, n);
 
 /**
  * Buffer size to use in RAM for creating packets
