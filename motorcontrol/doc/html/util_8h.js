@@ -1,6 +1,7 @@
 var util_8h =
 [
     [ "ONE_BY_SQRT_3", "group___u_t_i_l.html#gaa41d22d1f1a958f3082c18d6dd2a836d", null ],
+    [ "SIGN", "group___u_t_i_l.html#ga8c5ff70b6b28cd0157c50a22406f92c4", null ],
     [ "SQRT_3", "group___u_t_i_l.html#ga4c7cca717941f9eb5c7f90f44ac8746b", null ],
     [ "SQRT_3_BY_2", "group___u_t_i_l.html#gaeacb0280c2273988a94aba183a856692", null ],
     [ "TWO_BY_SQRT_3", "group___u_t_i_l.html#ga40ff6014468796057b990335d4bed48e", null ],
@@ -13,5 +14,6 @@ var util_8h =
     [ "stof", "group___u_t_i_l.html#ga9fb8c6ac338320c6c99d4ac926443fa8", null ],
     [ "utilFastAtan2", "group___u_t_i_l.html#gae0a4f2f8ae1e07e8af31754f48849c46", null ],
     [ "utils_norm_angle_rad", "group___u_t_i_l.html#gaf83ec773d8c5d23f50b870ad0b6c0afd", null ],
-    [ "utils_saturate_vector_2d", "group___u_t_i_l.html#ga3bb3383890bef303ae932e542f869410", null ]
+    [ "utils_saturate_vector_2d", "group___u_t_i_l.html#ga3bb3383890bef303ae932e542f869410", null ],
+    [ "wrapAngle", "group___u_t_i_l.html#ga4325cadf5b6972a7c79ee0b8baa098c8", null ]
 ];

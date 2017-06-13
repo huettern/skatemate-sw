@@ -78,6 +78,7 @@ var searchBox = new SearchBox("searchBox", "search",false,'Search');
       <li class="current"><a href="globals.html"><span>All</span></a></li>
       <li><a href="globals_func.html"><span>Functions</span></a></li>
       <li><a href="globals_enum.html"><span>Enumerations</span></a></li>
+      <li><a href="globals_eval.html"><span>Enumerator</span></a></li>
       <li><a href="globals_defs.html"><span>Macros</span></a></li>
     </ul>
   </div>
@@ -174,6 +175,42 @@ $(document).ready(function(){initNavTree('globals.html','');});
 <li>DRV_CURRENT_GAIN
 : <a class="el" href="group___m_c.html#ga9457c0a22a4b4009ced3b422c7b6e0a7">drv8301.h</a>
 </li>
+<li>DRV_FLT_FET_MASK
+: <a class="el" href="group___m_c.html#ga066ea02348f427d9ff644757db06f941">drv8301.h</a>
+</li>
+<li>DRV_FLT_FETHA_OC
+: <a class="el" href="group___m_c.html#gga9b48a0be2c8562c5dbb3e907e10e99aeaedc2a6dd0cbf4a4ba75f26c274cf5a4d">drv8301.h</a>
+</li>
+<li>DRV_FLT_FETHB_OC
+: <a class="el" href="group___m_c.html#gga9b48a0be2c8562c5dbb3e907e10e99aeaf9ef1b1457198b85cfda5b0bb37980e9">drv8301.h</a>
+</li>
+<li>DRV_FLT_FETHC_OC
+: <a class="el" href="group___m_c.html#gga9b48a0be2c8562c5dbb3e907e10e99aeac3605dcf65caa8663e1f28bff60afc07">drv8301.h</a>
+</li>
+<li>DRV_FLT_FETLA_OC
+: <a class="el" href="group___m_c.html#gga9b48a0be2c8562c5dbb3e907e10e99aea98125ea516ee6183de5f5ba42d101f21">drv8301.h</a>
+</li>
+<li>DRV_FLT_FETLB_OC
+: <a class="el" href="group___m_c.html#gga9b48a0be2c8562c5dbb3e907e10e99aea02cb62d3b952b2b346e3ac5183e5c015">drv8301.h</a>
+</li>
+<li>DRV_FLT_FETLC_OC
+: <a class="el" href="group___m_c.html#gga9b48a0be2c8562c5dbb3e907e10e99aea50056701b3da35cd3c5e086102cb0fcf">drv8301.h</a>
+</li>
+<li>DRV_FLT_GVDD_OV
+: <a class="el" href="group___m_c.html#gga9b48a0be2c8562c5dbb3e907e10e99aea63337594078c343cad0958b3548a1363">drv8301.h</a>
+</li>
+<li>DRV_FLT_GVDD_UV
+: <a class="el" href="group___m_c.html#gga9b48a0be2c8562c5dbb3e907e10e99aeacc5b9397768c88139027543c794e7cce">drv8301.h</a>
+</li>
+<li>DRV_FLT_OTSD
+: <a class="el" href="group___m_c.html#gga9b48a0be2c8562c5dbb3e907e10e99aeac737e7a063ea919911966d708e08385e">drv8301.h</a>
+</li>
+<li>DRV_FLT_OTW
+: <a class="el" href="group___m_c.html#gga9b48a0be2c8562c5dbb3e907e10e99aea90bb4622ea75f5fbf404dbecb9aafd5b">drv8301.h</a>
+</li>
+<li>DRV_FLT_PVDD_UV
+: <a class="el" href="group___m_c.html#gga9b48a0be2c8562c5dbb3e907e10e99aead5d64bb678919f784aeba5d830b19c32">drv8301.h</a>
+</li>
 <li>drvDCCalDisable
 : <a class="el" href="group___m_c.html#gabf4dbb543468907bf7a45562f9062a6f">drv8301.h</a>
 </li>
@@ -183,11 +220,17 @@ $(document).ready(function(){initNavTree('globals.html','');});
 <li>drvDumpStatus()
 : <a class="el" href="group___m_c.html#ga2ea9f5ade7c2c54756bc4285ca3604c9">drv8301.c</a>
 </li>
+<li>drvFault_t
+: <a class="el" href="group___m_c.html#ga9b48a0be2c8562c5dbb3e907e10e99ae">drv8301.h</a>
+</li>
 <li>drvGateDisable
 : <a class="el" href="group___m_c.html#gafe9f042a763216a48e8a536d09531415">drv8301.h</a>
 </li>
 <li>drvGateEnable
 : <a class="el" href="group___m_c.html#ga677631060a9e947ca82b6097403a81cb">drv8301.h</a>
+</li>
+<li>drvGetFault()
+: <a class="el" href="group___m_c.html#gad9c8cd5f4ab7184637e6c17ef2e4c8f9">drv8301.c</a>
 </li>
 <li>drvInit()
 : <a class="el" href="group___m_c.html#ga2ebb655e2855b35909209bf7cbf00b5d">drv8301.c</a>
@@ -254,11 +297,20 @@ $(document).ready(function(){initNavTree('globals.html','');});
 <li>mcfMeasureResistance()
 : <a class="el" href="group___m_c.html#ga72b92981287829c6e18f24a86c1a25a8">mc_foc.c</a>
 </li>
+<li>mcfSetCurrent()
+: <a class="el" href="group___m_c.html#ga3a0543c25c0a803a4e50b459f90cd73c">mc_foc.c</a>
+</li>
 <li>mcfSetCurrentFactor()
 : <a class="el" href="group___m_c.html#ga45f402aec7a14d2e111d8b41405537c8">mc_foc.c</a>
 </li>
 <li>mcfSetDuty()
 : <a class="el" href="group___m_c.html#ga2232149a66082728b9da99abb79af8f5">mc_foc.c</a>
+</li>
+<li>mcfSetForcedCommutationFrequency()
+: <a class="el" href="group___m_c.html#ga16e8a9920f71e4f0ecf8843f06f2cbd5">mc_foc.c</a>
+</li>
+<li>mcfSetMotorLock()
+: <a class="el" href="group___m_c.html#ga711a95f3011d926019808a9a5e981d54">mc_foc.c</a>
 </li>
 <li>mcfStartSample()
 : <a class="el" href="group___m_c.html#ga87f3558347386bf8de5accfcaca7f1bc">mc_foc.c</a>

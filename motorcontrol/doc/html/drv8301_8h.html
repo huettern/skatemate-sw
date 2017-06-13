@@ -105,6 +105,7 @@ $(document).ready(function(){initNavTree('drv8301_8h.html','');});
 <div class="header">
   <div class="summary">
 <a href="#define-members">Macros</a> &#124;
+<a href="#enum-members">Enumerations</a> &#124;
 <a href="#func-members">Functions</a>  </div>
   <div class="headertitle">
 <div class="title">drv8301.h File Reference</div>  </div>
@@ -247,6 +248,28 @@ Macros</h2></td></tr>
 #define&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group___m_c.html#ga475cdc9412f72793fefa9d32328788f2">drvIsFault</a>()&#160;&#160;&#160;(!palReadPad(DRV_NFAULT_PORT, DRV_NFAULT_PIN))</td></tr>
 <tr class="memdesc:ga475cdc9412f72793fefa9d32328788f2"><td class="mdescLeft">&#160;</td><td class="mdescRight">Returns the driver fault status. <br /></td></tr>
 <tr class="separator:ga475cdc9412f72793fefa9d32328788f2"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:ga066ea02348f427d9ff644757db06f941"><td class="memItemLeft" align="right" valign="top">#define&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group___m_c.html#ga066ea02348f427d9ff644757db06f941">DRV_FLT_FET_MASK</a>&#160;&#160;&#160;0x003f</td></tr>
+<tr class="separator:ga066ea02348f427d9ff644757db06f941"><td class="memSeparator" colspan="2">&#160;</td></tr>
+</table><table class="memberdecls">
+<tr class="heading"><td colspan="2"><h2 class="groupheader"><a name="enum-members"></a>
+Enumerations</h2></td></tr>
+<tr class="memitem:ga9b48a0be2c8562c5dbb3e907e10e99ae"><td class="memItemLeft" align="right" valign="top">enum &#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group___m_c.html#ga9b48a0be2c8562c5dbb3e907e10e99ae">drvFault_t</a> { <br />
+&#160;&#160;<a class="el" href="group___m_c.html#gga9b48a0be2c8562c5dbb3e907e10e99aea50056701b3da35cd3c5e086102cb0fcf">DRV_FLT_FETLC_OC</a> = 0x001, 
+<a class="el" href="group___m_c.html#gga9b48a0be2c8562c5dbb3e907e10e99aeac3605dcf65caa8663e1f28bff60afc07">DRV_FLT_FETHC_OC</a> = 0x002, 
+<a class="el" href="group___m_c.html#gga9b48a0be2c8562c5dbb3e907e10e99aea02cb62d3b952b2b346e3ac5183e5c015">DRV_FLT_FETLB_OC</a> = 0x004, 
+<a class="el" href="group___m_c.html#gga9b48a0be2c8562c5dbb3e907e10e99aeaf9ef1b1457198b85cfda5b0bb37980e9">DRV_FLT_FETHB_OC</a> = 0x008, 
+<br />
+&#160;&#160;<a class="el" href="group___m_c.html#gga9b48a0be2c8562c5dbb3e907e10e99aea98125ea516ee6183de5f5ba42d101f21">DRV_FLT_FETLA_OC</a> = 0x010, 
+<a class="el" href="group___m_c.html#gga9b48a0be2c8562c5dbb3e907e10e99aeaedc2a6dd0cbf4a4ba75f26c274cf5a4d">DRV_FLT_FETHA_OC</a> = 0x020, 
+<a class="el" href="group___m_c.html#gga9b48a0be2c8562c5dbb3e907e10e99aea90bb4622ea75f5fbf404dbecb9aafd5b">DRV_FLT_OTW</a> = 0x040, 
+<a class="el" href="group___m_c.html#gga9b48a0be2c8562c5dbb3e907e10e99aeac737e7a063ea919911966d708e08385e">DRV_FLT_OTSD</a> = 0x080, 
+<br />
+&#160;&#160;<a class="el" href="group___m_c.html#gga9b48a0be2c8562c5dbb3e907e10e99aead5d64bb678919f784aeba5d830b19c32">DRV_FLT_PVDD_UV</a> = 0x100, 
+<a class="el" href="group___m_c.html#gga9b48a0be2c8562c5dbb3e907e10e99aeacc5b9397768c88139027543c794e7cce">DRV_FLT_GVDD_UV</a> = 0x200, 
+<a class="el" href="group___m_c.html#gga9b48a0be2c8562c5dbb3e907e10e99aea63337594078c343cad0958b3548a1363">DRV_FLT_GVDD_OV</a> = 0x400
+<br />
+ }</td></tr>
+<tr class="separator:ga9b48a0be2c8562c5dbb3e907e10e99ae"><td class="memSeparator" colspan="2">&#160;</td></tr>
 </table><table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 class="groupheader"><a name="func-members"></a>
 Functions</h2></td></tr>
@@ -258,6 +281,9 @@ void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="grou
 void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group___m_c.html#ga2ea9f5ade7c2c54756bc4285ca3604c9">drvDumpStatus</a> (void)</td></tr>
 <tr class="memdesc:ga2ea9f5ade7c2c54756bc4285ca3604c9"><td class="mdescLeft">&#160;</td><td class="mdescRight">Dumps a status message to the DBG stream. <br /></td></tr>
 <tr class="separator:ga2ea9f5ade7c2c54756bc4285ca3604c9"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:gad9c8cd5f4ab7184637e6c17ef2e4c8f9"><td class="memItemLeft" align="right" valign="top"><a class="el" href="group___m_c.html#ga9b48a0be2c8562c5dbb3e907e10e99ae">drvFault_t</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group___m_c.html#gad9c8cd5f4ab7184637e6c17ef2e4c8f9">drvGetFault</a> (void)</td></tr>
+<tr class="memdesc:gad9c8cd5f4ab7184637e6c17ef2e4c8f9"><td class="mdescLeft">&#160;</td><td class="mdescRight">Get the faults of the driver.  <a href="group___m_c.html#gad9c8cd5f4ab7184637e6c17ef2e4c8f9">More...</a><br /></td></tr>
+<tr class="separator:gad9c8cd5f4ab7184637e6c17ef2e4c8f9"><td class="memSeparator" colspan="2">&#160;</td></tr>
 </table>
 <a name="details" id="details"></a><h2 class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>TI DRV8301 driver. </p>

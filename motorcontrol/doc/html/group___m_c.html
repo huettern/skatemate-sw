@@ -218,7 +218,7 @@ Macros</h2></td></tr>
 #define&#160;</td><td class="memItemRight" valign="bottom"><b>CTRL1_OCP_MODE_REPORT_ONLY</b>&#160;&#160;&#160;0x0020</td></tr>
 <tr class="separator:ga8194b3ecce6818cd57963698ab10f345"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:gaadc9ed83882a1da6f902fdaed8c7fcab"><td class="memItemLeft" align="right" valign="top"><a class="anchor" id="gaadc9ed83882a1da6f902fdaed8c7fcab"></a>
-#define&#160;</td><td class="memItemRight" valign="bottom"><b>CTRL1_OCP_MODE_DISABLED</b>&#160;&#160;&#160;0x0040</td></tr>
+#define&#160;</td><td class="memItemRight" valign="bottom"><b>CTRL1_OCP_MODE_DISABLED</b>&#160;&#160;&#160;0x0030</td></tr>
 <tr class="separator:gaadc9ed83882a1da6f902fdaed8c7fcab"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:gaea366c1e540b62ee6cd9751a66365681"><td class="memItemLeft" align="right" valign="top"><a class="anchor" id="gaea366c1e540b62ee6cd9751a66365681"></a>
 #define&#160;</td><td class="memItemRight" valign="bottom"><b>CTRL1_OC_ADJ_SET</b>(x)                  &#160;&#160;&#160;((x&lt;&lt;6) &amp; 0x07C0)</td></tr>
@@ -389,6 +389,8 @@ Macros</h2></td></tr>
 #define&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group___m_c.html#ga475cdc9412f72793fefa9d32328788f2">drvIsFault</a>()&#160;&#160;&#160;(!palReadPad(DRV_NFAULT_PORT, DRV_NFAULT_PIN))</td></tr>
 <tr class="memdesc:ga475cdc9412f72793fefa9d32328788f2"><td class="mdescLeft">&#160;</td><td class="mdescRight">Returns the driver fault status. <br /></td></tr>
 <tr class="separator:ga475cdc9412f72793fefa9d32328788f2"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:ga066ea02348f427d9ff644757db06f941"><td class="memItemLeft" align="right" valign="top">#define&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group___m_c.html#ga066ea02348f427d9ff644757db06f941">DRV_FLT_FET_MASK</a>&#160;&#160;&#160;0x003f</td></tr>
+<tr class="separator:ga066ea02348f427d9ff644757db06f941"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:ga1c3a2cd7a6c5f7a9eecdd57186030e42"><td class="memItemLeft" align="right" valign="top">#define&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group___m_c.html#ga1c3a2cd7a6c5f7a9eecdd57186030e42">DEBUG_CONTROLLERS</a></td></tr>
 <tr class="separator:ga1c3a2cd7a6c5f7a9eecdd57186030e42"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:ga71437ade895489e574688993ae6d6082"><td class="memItemLeft" align="right" valign="top"><a class="anchor" id="ga71437ade895489e574688993ae6d6082"></a>
@@ -396,7 +398,7 @@ Macros</h2></td></tr>
 <tr class="separator:ga71437ade895489e574688993ae6d6082"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:gabb71c1732d1cf1661c1e670ca249e3ab"><td class="memItemLeft" align="right" valign="top">#define&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group___m_c.html#gabb71c1732d1cf1661c1e670ca249e3ab">FOC_F_SW</a>&#160;&#160;&#160;20000</td></tr>
 <tr class="separator:gabb71c1732d1cf1661c1e670ca249e3ab"><td class="memSeparator" colspan="2">&#160;</td></tr>
-<tr class="memitem:gaac0cf2145b56c99fc2d88a2f27e78edf"><td class="memItemLeft" align="right" valign="top">#define&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group___m_c.html#gaac0cf2145b56c99fc2d88a2f27e78edf">FOC_PWM_DEADTIME_CYCLES</a>&#160;&#160;&#160;0</td></tr>
+<tr class="memitem:gaac0cf2145b56c99fc2d88a2f27e78edf"><td class="memItemLeft" align="right" valign="top">#define&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group___m_c.html#gaac0cf2145b56c99fc2d88a2f27e78edf">FOC_PWM_DEADTIME_CYCLES</a>&#160;&#160;&#160;20</td></tr>
 <tr class="separator:gaac0cf2145b56c99fc2d88a2f27e78edf"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:ga4037684d40fadb7e24f528840989d636"><td class="memItemLeft" align="right" valign="top">#define&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group___m_c.html#ga4037684d40fadb7e24f528840989d636">FOC_THREAD_INTERVAL</a>&#160;&#160;&#160;100</td></tr>
 <tr class="separator:ga4037684d40fadb7e24f528840989d636"><td class="memSeparator" colspan="2">&#160;</td></tr>
@@ -406,7 +408,7 @@ Macros</h2></td></tr>
 <tr class="separator:gacfb31a6a2e694e135c30668eea277662"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:ga608388f822b56bbc2063e21b48fdb599"><td class="memItemLeft" align="right" valign="top">#define&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group___m_c.html#ga608388f822b56bbc2063e21b48fdb599">FOC_VOLT_MEAS_SLOWDOWN</a>&#160;&#160;&#160;10</td></tr>
 <tr class="separator:ga608388f822b56bbc2063e21b48fdb599"><td class="memSeparator" colspan="2">&#160;</td></tr>
-<tr class="memitem:gad4bed45bfce24edabd6294babc9f1197"><td class="memItemLeft" align="right" valign="top">#define&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group___m_c.html#gad4bed45bfce24edabd6294babc9f1197">FOC_FORCED_COMM_FREQ</a>&#160;&#160;&#160;-30.0</td></tr>
+<tr class="memitem:gad4bed45bfce24edabd6294babc9f1197"><td class="memItemLeft" align="right" valign="top">#define&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group___m_c.html#gad4bed45bfce24edabd6294babc9f1197">FOC_FORCED_COMM_FREQ</a>&#160;&#160;&#160;30.0</td></tr>
 <tr class="separator:gad4bed45bfce24edabd6294babc9f1197"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:ga870d0392f4d39a91e5dab169ab440d02"><td class="memItemLeft" align="right" valign="top"><a class="anchor" id="ga870d0392f4d39a91e5dab169ab440d02"></a>
 #define&#160;</td><td class="memItemRight" valign="bottom"><b>FOC_FORCED_COMM_VD</b>&#160;&#160;&#160;0.0</td></tr>
@@ -414,7 +416,7 @@ Macros</h2></td></tr>
 <tr class="memitem:ga5e2b81043cce8079564ec7bab1f6426e"><td class="memItemLeft" align="right" valign="top"><a class="anchor" id="ga5e2b81043cce8079564ec7bab1f6426e"></a>
 #define&#160;</td><td class="memItemRight" valign="bottom"><b>FOC_FORCED_COMM_VQ</b>&#160;&#160;&#160;0.07</td></tr>
 <tr class="separator:ga5e2b81043cce8079564ec7bab1f6426e"><td class="memSeparator" colspan="2">&#160;</td></tr>
-<tr class="memitem:ga3c5b6269c03aaff1a01cdb6fa75a5d45"><td class="memItemLeft" align="right" valign="top">#define&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group___m_c.html#ga3c5b6269c03aaff1a01cdb6fa75a5d45">FOC_PARAM_DEFAULT_CURR_MAX</a>&#160;&#160;&#160;10.0</td></tr>
+<tr class="memitem:ga3c5b6269c03aaff1a01cdb6fa75a5d45"><td class="memItemLeft" align="right" valign="top">#define&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group___m_c.html#ga3c5b6269c03aaff1a01cdb6fa75a5d45">FOC_PARAM_DEFAULT_CURR_MAX</a>&#160;&#160;&#160;20.0</td></tr>
 <tr class="separator:ga3c5b6269c03aaff1a01cdb6fa75a5d45"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:gae446dae77e124e7720ec857b3162d629"><td class="memItemLeft" align="right" valign="top">#define&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group___m_c.html#gae446dae77e124e7720ec857b3162d629">FOC_PARAM_DEFAULT_CURR_FAC_DEADBAND</a>&#160;&#160;&#160;0.05</td></tr>
 <tr class="separator:gae446dae77e124e7720ec857b3162d629"><td class="memSeparator" colspan="2">&#160;</td></tr>
@@ -427,7 +429,7 @@ Macros</h2></td></tr>
 #define&#160;</td><td class="memItemRight" valign="bottom"><b>FOC_MOTOR_DEFAULT_LS</b>&#160;&#160;&#160;35.0e-6</td></tr>
 <tr class="separator:ga9cf13f7130490b835697684fc1e65035"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:ga29a7456becd41f070a9acccbbc4a228d"><td class="memItemLeft" align="right" valign="top"><a class="anchor" id="ga29a7456becd41f070a9acccbbc4a228d"></a>
-#define&#160;</td><td class="memItemRight" valign="bottom"><b>FOC_MOTOR_DEFAULT_RS</b>&#160;&#160;&#160;20*0.04</td></tr>
+#define&#160;</td><td class="memItemRight" valign="bottom"><b>FOC_MOTOR_DEFAULT_RS</b>&#160;&#160;&#160;0.1</td></tr>
 <tr class="separator:ga29a7456becd41f070a9acccbbc4a228d"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:gac3a69c38b1c7db5fc82636782a3ab0ff"><td class="memItemLeft" align="right" valign="top"><a class="anchor" id="gac3a69c38b1c7db5fc82636782a3ab0ff"></a>
 #define&#160;</td><td class="memItemRight" valign="bottom"><b>FOC_MOTOR_DEFAULT_J</b>&#160;&#160;&#160;150e-6</td></tr>
@@ -447,16 +449,16 @@ Macros</h2></td></tr>
 #define&#160;</td><td class="memItemRight" valign="bottom"><b>FOC_PARAM_DEFAULT_OBS_SPEED_ITERM_MIN</b>&#160;&#160;&#160;-10.0</td></tr>
 <tr class="separator:ga49eb0a9c92175d1fdb28453c6ef5db3c"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:ga714a0bbc709f7fefbf094b8784c062ab"><td class="memItemLeft" align="right" valign="top"><a class="anchor" id="ga714a0bbc709f7fefbf094b8784c062ab"></a>
-#define&#160;</td><td class="memItemRight" valign="bottom"><b>FOC_PARAM_DEFAULT_CURR_D_KP</b>&#160;&#160;&#160;0.1</td></tr>
+#define&#160;</td><td class="memItemRight" valign="bottom"><b>FOC_PARAM_DEFAULT_CURR_D_KP</b>&#160;&#160;&#160;0.01</td></tr>
 <tr class="separator:ga714a0bbc709f7fefbf094b8784c062ab"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:ga4e5457ab50529615ed0b1760fa715760"><td class="memItemLeft" align="right" valign="top"><a class="anchor" id="ga4e5457ab50529615ed0b1760fa715760"></a>
-#define&#160;</td><td class="memItemRight" valign="bottom"><b>FOC_PARAM_DEFAULT_CURR_D_KI</b>&#160;&#160;&#160;20.0</td></tr>
+#define&#160;</td><td class="memItemRight" valign="bottom"><b>FOC_PARAM_DEFAULT_CURR_D_KI</b>&#160;&#160;&#160;0.0</td></tr>
 <tr class="separator:ga4e5457ab50529615ed0b1760fa715760"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:ga3ad098e114b8de0a80cc25dc4d630abf"><td class="memItemLeft" align="right" valign="top"><a class="anchor" id="ga3ad098e114b8de0a80cc25dc4d630abf"></a>
-#define&#160;</td><td class="memItemRight" valign="bottom"><b>FOC_PARAM_DEFAULT_CURR_Q_KP</b>&#160;&#160;&#160;0.3</td></tr>
+#define&#160;</td><td class="memItemRight" valign="bottom"><b>FOC_PARAM_DEFAULT_CURR_Q_KP</b>&#160;&#160;&#160;0.01</td></tr>
 <tr class="separator:ga3ad098e114b8de0a80cc25dc4d630abf"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:ga42c5e4082cf9c724ab912e311baf9cf8"><td class="memItemLeft" align="right" valign="top"><a class="anchor" id="ga42c5e4082cf9c724ab912e311baf9cf8"></a>
-#define&#160;</td><td class="memItemRight" valign="bottom"><b>FOC_PARAM_DEFAULT_CURR_Q_KI</b>&#160;&#160;&#160;20.0</td></tr>
+#define&#160;</td><td class="memItemRight" valign="bottom"><b>FOC_PARAM_DEFAULT_CURR_Q_KI</b>&#160;&#160;&#160;0.0</td></tr>
 <tr class="separator:ga42c5e4082cf9c724ab912e311baf9cf8"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:ga0cada986b9f208c031c2be6f0c7e3f64"><td class="memItemLeft" align="right" valign="top"><a class="anchor" id="ga0cada986b9f208c031c2be6f0c7e3f64"></a>
 #define&#160;</td><td class="memItemRight" valign="bottom"><b>FOC_PARAM_DEFAULT_ITERM_CEIL</b>&#160;&#160;&#160;100.0</td></tr>
@@ -517,11 +519,14 @@ Macros</h2></td></tr>
 #define&#160;</td><td class="memItemRight" valign="bottom"><b>OBS_STORE_DEPTH</b>&#160;&#160;&#160;1</td></tr>
 <tr class="separator:ga32c3c48627bde0562c322cbd2af78654"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:ga85f34c4c4db07b43fcce1f74cf8f7e59"><td class="memItemLeft" align="right" valign="top"><a class="anchor" id="ga85f34c4c4db07b43fcce1f74cf8f7e59"></a>
-#define&#160;</td><td class="memItemRight" valign="bottom"><b>CONT_STORE_DEPTH</b>&#160;&#160;&#160;200</td></tr>
+#define&#160;</td><td class="memItemRight" valign="bottom"><b>CONT_STORE_DEPTH</b>&#160;&#160;&#160;800</td></tr>
 <tr class="separator:ga85f34c4c4db07b43fcce1f74cf8f7e59"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:ga5ded556c14e4ecef38428f3f92f0d0dc"><td class="memItemLeft" align="right" valign="top"><a class="anchor" id="ga5ded556c14e4ecef38428f3f92f0d0dc"></a>
 #define&#160;</td><td class="memItemRight" valign="bottom"><b>SVM_STORE_DEPTH</b>&#160;&#160;&#160;1</td></tr>
 <tr class="separator:ga5ded556c14e4ecef38428f3f92f0d0dc"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:ga85f04851b84096664f51d23b90704425"><td class="memItemLeft" align="right" valign="top"><a class="anchor" id="ga85f04851b84096664f51d23b90704425"></a>
+#define&#160;</td><td class="memItemRight" valign="bottom"><b>DBGISR</b>(X, ...)&#160;&#160;&#160;chsnprintf(mIsrDbgString, sizeof(mIsrDbgString), X, ##__VA_ARGS__ )</td></tr>
+<tr class="separator:ga85f04851b84096664f51d23b90704425"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:ga87e1b83958a1741c01d9e6bd4726da4f"><td class="memItemLeft" align="right" valign="top">#define&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group___m_c.html#ga87e1b83958a1741c01d9e6bd4726da4f">TIMER_UPDATE_DUTY</a>(duty1,  duty2,  duty3)</td></tr>
 <tr class="memdesc:ga87e1b83958a1741c01d9e6bd4726da4f"><td class="mdescLeft">&#160;</td><td class="mdescRight">synchronous update of the PWM duty cycles  <a href="#ga87e1b83958a1741c01d9e6bd4726da4f">More...</a><br /></td></tr>
 <tr class="separator:ga87e1b83958a1741c01d9e6bd4726da4f"><td class="memSeparator" colspan="2">&#160;</td></tr>
@@ -540,17 +545,18 @@ Macros</h2></td></tr>
 <tr class="memitem:ga5e5049a2cb9989832c5afe8f64224c64"><td class="memItemLeft" align="right" valign="top"><a class="anchor" id="ga5e5049a2cb9989832c5afe8f64224c64"></a>
 #define&#160;</td><td class="memItemRight" valign="bottom"><b>ADC_STORE_VOLT</b>(i,  ch)&#160;&#160;&#160;( (float)mADCValueStore[i][ch] * mADCtoVoltsFactor)</td></tr>
 <tr class="separator:ga5e5049a2cb9989832c5afe8f64224c64"><td class="memSeparator" colspan="2">&#160;</td></tr>
-<tr class="memitem:ga88e369a1a91af1d96b0e555a7d3357c5"><td class="memItemLeft" align="right" valign="top">#define&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group___m_c.html#ga88e369a1a91af1d96b0e555a7d3357c5">ADC_CURR_A</a>()&#160;&#160;&#160;( ((float)mADCValue[ADC_CH_CURR_A]-mDrvOffA) * mADCtoAmpsFactor )</td></tr>
-<tr class="memdesc:ga88e369a1a91af1d96b0e555a7d3357c5"><td class="mdescLeft">&#160;</td><td class="mdescRight">Returns the current in the shunt resister.  <a href="#ga88e369a1a91af1d96b0e555a7d3357c5">More...</a><br /></td></tr>
+<tr class="memitem:ga88e369a1a91af1d96b0e555a7d3357c5"><td class="memItemLeft" align="right" valign="top"><a class="anchor" id="ga88e369a1a91af1d96b0e555a7d3357c5"></a>
+#define&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group___m_c.html#ga88e369a1a91af1d96b0e555a7d3357c5">ADC_CURR_A</a>()&#160;&#160;&#160;( ((float)mADCValue[ADC_CH_CURR_A]-mDrvOffA) * mADCtoAmpsFactor )</td></tr>
+<tr class="memdesc:ga88e369a1a91af1d96b0e555a7d3357c5"><td class="mdescLeft">&#160;</td><td class="mdescRight">Returns the current in the shunt resister. <br /></td></tr>
 <tr class="separator:ga88e369a1a91af1d96b0e555a7d3357c5"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:ga4ca8cc9adcfacd7011999071cad87ff9"><td class="memItemLeft" align="right" valign="top"><a class="anchor" id="ga4ca8cc9adcfacd7011999071cad87ff9"></a>
-#define&#160;</td><td class="memItemRight" valign="bottom"><b>ADC_CURR_B</b>()&#160;&#160;&#160;( ((float)mADCValue[ADC_CH_CURR_B]-mDrvOffB) * mADCtoAmpsFactor / 2.2)</td></tr>
+#define&#160;</td><td class="memItemRight" valign="bottom"><b>ADC_CURR_B</b>()&#160;&#160;&#160;( ((float)mADCValue[ADC_CH_CURR_B]-mDrvOffB) * mADCtoAmpsFactor )</td></tr>
 <tr class="separator:ga4ca8cc9adcfacd7011999071cad87ff9"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:ga9c691e16ee77756b46303a604ef734fc"><td class="memItemLeft" align="right" valign="top"><a class="anchor" id="ga9c691e16ee77756b46303a604ef734fc"></a>
-#define&#160;</td><td class="memItemRight" valign="bottom"><b>ADC_STORE_CURR_A</b>(i)&#160;&#160;&#160;( ((float)mADCValueStore[i][ADC_CH_CURR_A]-mDrvOffA) * -mADCtoAmpsFactor )</td></tr>
+#define&#160;</td><td class="memItemRight" valign="bottom"><b>ADC_STORE_CURR_A</b>(i)&#160;&#160;&#160;( ((float)mADCValueStore[i][ADC_CH_CURR_A]-mDrvOffA) * mADCtoAmpsFactor )</td></tr>
 <tr class="separator:ga9c691e16ee77756b46303a604ef734fc"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:ga9f2f0ad3fd5a3b4e207e93579862bed6"><td class="memItemLeft" align="right" valign="top"><a class="anchor" id="ga9f2f0ad3fd5a3b4e207e93579862bed6"></a>
-#define&#160;</td><td class="memItemRight" valign="bottom"><b>ADC_STORE_CURR_B</b>(i)&#160;&#160;&#160;( ((float)mADCValueStore[i][ADC_CH_CURR_B]-mDrvOffB) * -mADCtoAmpsFactor )</td></tr>
+#define&#160;</td><td class="memItemRight" valign="bottom"><b>ADC_STORE_CURR_B</b>(i)&#160;&#160;&#160;( ((float)mADCValueStore[i][ADC_CH_CURR_B]-mDrvOffB) * mADCtoAmpsFactor )</td></tr>
 <tr class="separator:ga9f2f0ad3fd5a3b4e207e93579862bed6"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:gafd4ea0313f41e66dfb802cad5d9102b0"><td class="memItemLeft" align="right" valign="top"><a class="anchor" id="gafd4ea0313f41e66dfb802cad5d9102b0"></a>
 #define&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group___m_c.html#gafd4ea0313f41e66dfb802cad5d9102b0">ADC_TEMP</a>(ch)&#160;&#160;&#160;((((1.43 - <a class="el" href="group___m_c.html#ga20ac88fd0e586934a686cd94507acede">ADC_PIN</a>(ch) )) / 0.0043F) + 25.0f)</td></tr>
@@ -562,6 +568,23 @@ Macros</h2></td></tr>
 </table><table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 class="groupheader"><a name="enum-members"></a>
 Enumerations</h2></td></tr>
+<tr class="memitem:ga9b48a0be2c8562c5dbb3e907e10e99ae"><td class="memItemLeft" align="right" valign="top">enum &#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group___m_c.html#ga9b48a0be2c8562c5dbb3e907e10e99ae">drvFault_t</a> { <br />
+&#160;&#160;<a class="el" href="group___m_c.html#gga9b48a0be2c8562c5dbb3e907e10e99aea50056701b3da35cd3c5e086102cb0fcf">DRV_FLT_FETLC_OC</a> = 0x001, 
+<a class="el" href="group___m_c.html#gga9b48a0be2c8562c5dbb3e907e10e99aeac3605dcf65caa8663e1f28bff60afc07">DRV_FLT_FETHC_OC</a> = 0x002, 
+<a class="el" href="group___m_c.html#gga9b48a0be2c8562c5dbb3e907e10e99aea02cb62d3b952b2b346e3ac5183e5c015">DRV_FLT_FETLB_OC</a> = 0x004, 
+<a class="el" href="group___m_c.html#gga9b48a0be2c8562c5dbb3e907e10e99aeaf9ef1b1457198b85cfda5b0bb37980e9">DRV_FLT_FETHB_OC</a> = 0x008, 
+<br />
+&#160;&#160;<a class="el" href="group___m_c.html#gga9b48a0be2c8562c5dbb3e907e10e99aea98125ea516ee6183de5f5ba42d101f21">DRV_FLT_FETLA_OC</a> = 0x010, 
+<a class="el" href="group___m_c.html#gga9b48a0be2c8562c5dbb3e907e10e99aeaedc2a6dd0cbf4a4ba75f26c274cf5a4d">DRV_FLT_FETHA_OC</a> = 0x020, 
+<a class="el" href="group___m_c.html#gga9b48a0be2c8562c5dbb3e907e10e99aea90bb4622ea75f5fbf404dbecb9aafd5b">DRV_FLT_OTW</a> = 0x040, 
+<a class="el" href="group___m_c.html#gga9b48a0be2c8562c5dbb3e907e10e99aeac737e7a063ea919911966d708e08385e">DRV_FLT_OTSD</a> = 0x080, 
+<br />
+&#160;&#160;<a class="el" href="group___m_c.html#gga9b48a0be2c8562c5dbb3e907e10e99aead5d64bb678919f784aeba5d830b19c32">DRV_FLT_PVDD_UV</a> = 0x100, 
+<a class="el" href="group___m_c.html#gga9b48a0be2c8562c5dbb3e907e10e99aeacc5b9397768c88139027543c794e7cce">DRV_FLT_GVDD_UV</a> = 0x200, 
+<a class="el" href="group___m_c.html#gga9b48a0be2c8562c5dbb3e907e10e99aea63337594078c343cad0958b3548a1363">DRV_FLT_GVDD_OV</a> = 0x400
+<br />
+ }</td></tr>
+<tr class="separator:ga9b48a0be2c8562c5dbb3e907e10e99ae"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:gad5ddc1a0d79451b9d4737693f0cc21f1"><td class="memItemLeft" align="right" valign="top"><a class="anchor" id="gad5ddc1a0d79451b9d4737693f0cc21f1"></a>enum &#160;</td><td class="memItemRight" valign="bottom"><b>mcState_t</b> { <b>MC_HALT</b> = 0, 
 <b>MC_OPEN_LOOP</b> = 1, 
 <b>MC_CLOSED_LOOP_CURRENT</b> = 2, 
@@ -579,6 +602,9 @@ void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="grou
 void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group___m_c.html#ga2ea9f5ade7c2c54756bc4285ca3604c9">drvDumpStatus</a> (void)</td></tr>
 <tr class="memdesc:ga2ea9f5ade7c2c54756bc4285ca3604c9"><td class="mdescLeft">&#160;</td><td class="mdescRight">Dumps a status message to the DBG stream. <br /></td></tr>
 <tr class="separator:ga2ea9f5ade7c2c54756bc4285ca3604c9"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:gad9c8cd5f4ab7184637e6c17ef2e4c8f9"><td class="memItemLeft" align="right" valign="top"><a class="el" href="group___m_c.html#ga9b48a0be2c8562c5dbb3e907e10e99ae">drvFault_t</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group___m_c.html#gad9c8cd5f4ab7184637e6c17ef2e4c8f9">drvGetFault</a> (void)</td></tr>
+<tr class="memdesc:gad9c8cd5f4ab7184637e6c17ef2e4c8f9"><td class="mdescLeft">&#160;</td><td class="mdescRight">Get the faults of the driver.  <a href="#gad9c8cd5f4ab7184637e6c17ef2e4c8f9">More...</a><br /></td></tr>
+<tr class="separator:gad9c8cd5f4ab7184637e6c17ef2e4c8f9"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:ga6f998668e961b6bd6c06f228c867441c"><td class="memItemLeft" align="right" valign="top">void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group___m_c.html#ga6f998668e961b6bd6c06f228c867441c">mcfInit</a> (void)</td></tr>
 <tr class="memdesc:ga6f998668e961b6bd6c06f228c867441c"><td class="mdescLeft">&#160;</td><td class="mdescRight">Init the mc FOC peripherals, data and threads.  <a href="#ga6f998668e961b6bd6c06f228c867441c">More...</a><br /></td></tr>
 <tr class="separator:ga6f998668e961b6bd6c06f228c867441c"><td class="memSeparator" colspan="2">&#160;</td></tr>
@@ -588,6 +614,15 @@ void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="grou
 <tr class="memitem:ga45f402aec7a14d2e111d8b41405537c8"><td class="memItemLeft" align="right" valign="top">void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group___m_c.html#ga45f402aec7a14d2e111d8b41405537c8">mcfSetCurrentFactor</a> (float in)</td></tr>
 <tr class="memdesc:ga45f402aec7a14d2e111d8b41405537c8"><td class="mdescLeft">&#160;</td><td class="mdescRight">Set the current from min current to max current.  <a href="#ga45f402aec7a14d2e111d8b41405537c8">More...</a><br /></td></tr>
 <tr class="separator:ga45f402aec7a14d2e111d8b41405537c8"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:ga3a0543c25c0a803a4e50b459f90cd73c"><td class="memItemLeft" align="right" valign="top">void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group___m_c.html#ga3a0543c25c0a803a4e50b459f90cd73c">mcfSetCurrent</a> (float in)</td></tr>
+<tr class="memdesc:ga3a0543c25c0a803a4e50b459f90cd73c"><td class="mdescLeft">&#160;</td><td class="mdescRight">Set the current from min current to max current.  <a href="#ga3a0543c25c0a803a4e50b459f90cd73c">More...</a><br /></td></tr>
+<tr class="separator:ga3a0543c25c0a803a4e50b459f90cd73c"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:ga711a95f3011d926019808a9a5e981d54"><td class="memItemLeft" align="right" valign="top">void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group___m_c.html#ga711a95f3011d926019808a9a5e981d54">mcfSetMotorLock</a> (uint8_t in)</td></tr>
+<tr class="memdesc:ga711a95f3011d926019808a9a5e981d54"><td class="mdescLeft">&#160;</td><td class="mdescRight">Lock or release the motor.  <a href="#ga711a95f3011d926019808a9a5e981d54">More...</a><br /></td></tr>
+<tr class="separator:ga711a95f3011d926019808a9a5e981d54"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:ga16e8a9920f71e4f0ecf8843f06f2cbd5"><td class="memItemLeft" align="right" valign="top">void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group___m_c.html#ga16e8a9920f71e4f0ecf8843f06f2cbd5">mcfSetForcedCommutationFrequency</a> (float in)</td></tr>
+<tr class="memdesc:ga16e8a9920f71e4f0ecf8843f06f2cbd5"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sets the motor in forced commutation with the given frequency.  <a href="#ga16e8a9920f71e4f0ecf8843f06f2cbd5">More...</a><br /></td></tr>
+<tr class="separator:ga16e8a9920f71e4f0ecf8843f06f2cbd5"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:ga8d65a964f6f0f2babcea05229c113580"><td class="memItemLeft" align="right" valign="top"><a class="anchor" id="ga8d65a964f6f0f2babcea05229c113580"></a>
 void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group___m_c.html#ga8d65a964f6f0f2babcea05229c113580">mcfDumpData</a> (void)</td></tr>
 <tr class="memdesc:ga8d65a964f6f0f2babcea05229c113580"><td class="mdescLeft">&#160;</td><td class="mdescRight">Dumps the local data to the debug stream. <br /></td></tr>
@@ -611,26 +646,6 @@ void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="grou
 <a name="details" id="details"></a><h2 class="groupheader">Detailed Description</h2>
 <p>Motor control. </p>
 <h2 class="groupheader">Macro Definition Documentation</h2>
-<a class="anchor" id="ga88e369a1a91af1d96b0e555a7d3357c5"></a>
-<div class="memitem">
-<div class="memproto">
-      <table class="memname">
-        <tr>
-          <td class="memname">#define ADC_CURR_A</td>
-          <td>(</td>
-          <td class="paramname"></td><td>)</td>
-          <td>&#160;&#160;&#160;( ((float)mADCValue[ADC_CH_CURR_A]-mDrvOffA) * mADCtoAmpsFactor )</td>
-        </tr>
-      </table>
-</div><div class="memdoc">
-
-<p>Returns the current in the shunt resister. </p>
-<dl class="section note"><dt>Note</dt><dd>TODO: Remove minus for new revision!!! </dd>
-<dd>
-TODO: Removed the minus again on old hardware but why??? </dd></dl>
-
-</div>
-</div>
 <a class="anchor" id="ga974244cd7d8e0646af306a928e05466a"></a>
 <div class="memitem">
 <div class="memproto">
@@ -676,6 +691,19 @@ TODO: Removed the minus again on old hardware but why??? </dd></dl>
 
 </div>
 </div>
+<a class="anchor" id="ga066ea02348f427d9ff644757db06f941"></a>
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">#define DRV_FLT_FET_MASK&#160;&#160;&#160;0x003f</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+<p>Masks the FET overcurrent bits from a drvFault_t </p>
+
+</div>
+</div>
 <a class="anchor" id="ga604d0519514e5026b51fe02218131e56"></a>
 <div class="memitem">
 <div class="memproto">
@@ -707,7 +735,7 @@ TODO: Removed the minus again on old hardware but why??? </dd></dl>
 <div class="memproto">
       <table class="memname">
         <tr>
-          <td class="memname">#define FOC_FORCED_COMM_FREQ&#160;&#160;&#160;-30.0</td>
+          <td class="memname">#define FOC_FORCED_COMM_FREQ&#160;&#160;&#160;30.0</td>
         </tr>
       </table>
 </div><div class="memdoc">
@@ -746,7 +774,7 @@ TODO: Removed the minus again on old hardware but why??? </dd></dl>
 <div class="memproto">
       <table class="memname">
         <tr>
-          <td class="memname">#define FOC_PARAM_DEFAULT_CURR_MAX&#160;&#160;&#160;10.0</td>
+          <td class="memname">#define FOC_PARAM_DEFAULT_CURR_MAX&#160;&#160;&#160;20.0</td>
         </tr>
       </table>
 </div><div class="memdoc">
@@ -772,7 +800,7 @@ TODO: Removed the minus again on old hardware but why??? </dd></dl>
 <div class="memproto">
       <table class="memname">
         <tr>
-          <td class="memname">#define FOC_PWM_DEADTIME_CYCLES&#160;&#160;&#160;0</td>
+          <td class="memname">#define FOC_PWM_DEADTIME_CYCLES&#160;&#160;&#160;20</td>
         </tr>
       </table>
 </div><div class="memdoc">
@@ -888,7 +916,74 @@ TODO: Removed the minus again on old hardware but why??? </dd></dl>
 
 </div>
 </div>
+<h2 class="groupheader">Enumeration Type Documentation</h2>
+<a class="anchor" id="ga9b48a0be2c8562c5dbb3e907e10e99ae"></a>
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">enum <a class="el" href="group___m_c.html#ga9b48a0be2c8562c5dbb3e907e10e99ae">drvFault_t</a></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+<table class="fieldtable">
+<tr><th colspan="2">Enumerator</th></tr><tr><td class="fieldname"><a class="anchor" id="gga9b48a0be2c8562c5dbb3e907e10e99aea50056701b3da35cd3c5e086102cb0fcf"></a>DRV_FLT_FETLC_OC&#160;</td><td class="fielddoc">
+<p>Low Side FET C overcurrent </p>
+</td></tr>
+<tr><td class="fieldname"><a class="anchor" id="gga9b48a0be2c8562c5dbb3e907e10e99aeac3605dcf65caa8663e1f28bff60afc07"></a>DRV_FLT_FETHC_OC&#160;</td><td class="fielddoc">
+<p>High Side FET C overcurrent </p>
+</td></tr>
+<tr><td class="fieldname"><a class="anchor" id="gga9b48a0be2c8562c5dbb3e907e10e99aea02cb62d3b952b2b346e3ac5183e5c015"></a>DRV_FLT_FETLB_OC&#160;</td><td class="fielddoc">
+<p>Low Side FET B overcurrent </p>
+</td></tr>
+<tr><td class="fieldname"><a class="anchor" id="gga9b48a0be2c8562c5dbb3e907e10e99aeaf9ef1b1457198b85cfda5b0bb37980e9"></a>DRV_FLT_FETHB_OC&#160;</td><td class="fielddoc">
+<p>High Side FET B overcurrent </p>
+</td></tr>
+<tr><td class="fieldname"><a class="anchor" id="gga9b48a0be2c8562c5dbb3e907e10e99aea98125ea516ee6183de5f5ba42d101f21"></a>DRV_FLT_FETLA_OC&#160;</td><td class="fielddoc">
+<p>Low Side FET A overcurrent </p>
+</td></tr>
+<tr><td class="fieldname"><a class="anchor" id="gga9b48a0be2c8562c5dbb3e907e10e99aeaedc2a6dd0cbf4a4ba75f26c274cf5a4d"></a>DRV_FLT_FETHA_OC&#160;</td><td class="fielddoc">
+<p>High Side FET A overcurrent </p>
+</td></tr>
+<tr><td class="fieldname"><a class="anchor" id="gga9b48a0be2c8562c5dbb3e907e10e99aea90bb4622ea75f5fbf404dbecb9aafd5b"></a>DRV_FLT_OTW&#160;</td><td class="fielddoc">
+<p>Overtemperature Warning </p>
+</td></tr>
+<tr><td class="fieldname"><a class="anchor" id="gga9b48a0be2c8562c5dbb3e907e10e99aeac737e7a063ea919911966d708e08385e"></a>DRV_FLT_OTSD&#160;</td><td class="fielddoc">
+<p>Over Temperature Latched Shut Down of Gate Driver and Charge Pump </p>
+</td></tr>
+<tr><td class="fieldname"><a class="anchor" id="gga9b48a0be2c8562c5dbb3e907e10e99aead5d64bb678919f784aeba5d830b19c32"></a>DRV_FLT_PVDD_UV&#160;</td><td class="fielddoc">
+<p>Power supply for gate driver, current shunt amplifier, and SPI communication undervoltage </p>
+</td></tr>
+<tr><td class="fieldname"><a class="anchor" id="gga9b48a0be2c8562c5dbb3e907e10e99aeacc5b9397768c88139027543c794e7cce"></a>DRV_FLT_GVDD_UV&#160;</td><td class="fielddoc">
+<p>Internal gate driver voltage regulator undervoltage </p>
+</td></tr>
+<tr><td class="fieldname"><a class="anchor" id="gga9b48a0be2c8562c5dbb3e907e10e99aea63337594078c343cad0958b3548a1363"></a>DRV_FLT_GVDD_OV&#160;</td><td class="fielddoc">
+<p>Internal gate driver voltage regulator overvoltage </p>
+</td></tr>
+</table>
+
+</div>
+</div>
 <h2 class="groupheader">Function Documentation</h2>
+<a class="anchor" id="gad9c8cd5f4ab7184637e6c17ef2e4c8f9"></a>
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="group___m_c.html#ga9b48a0be2c8562c5dbb3e907e10e99ae">drvFault_t</a> drvGetFault </td>
+          <td>(</td>
+          <td class="paramtype">void&#160;</td>
+          <td class="paramname"></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>Get the faults of the driver. </p>
+<dl class="section return"><dt>Returns</dt><dd>Fault register bits </dd></dl>
+
+</div>
+</div>
 <a class="anchor" id="ga6f998668e961b6bd6c06f228c867441c"></a>
 <div class="memitem">
 <div class="memproto">
@@ -957,6 +1052,30 @@ TODO: Removed the minus again on old hardware but why??? </dd></dl>
 
 </div>
 </div>
+<a class="anchor" id="ga3a0543c25c0a803a4e50b459f90cd73c"></a>
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">void mcfSetCurrent </td>
+          <td>(</td>
+          <td class="paramtype">float&#160;</td>
+          <td class="paramname"><em>in</em></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>Set the current from min current to max current. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramdir">[in]</td><td class="paramname">in</td><td>from -1.0 to 1.0 </td></tr>
+  </table>
+  </dd>
+</dl>
+
+</div>
+</div>
 <a class="anchor" id="ga45f402aec7a14d2e111d8b41405537c8"></a>
 <div class="memitem">
 <div class="memproto">
@@ -1017,6 +1136,54 @@ TODO: Removed the minus again on old hardware but why??? </dd></dl>
     <tr><td class="paramdir">[in]</td><td class="paramname">a</td><td>Phase a duty </td></tr>
     <tr><td class="paramdir">[in]</td><td class="paramname">b</td><td>Phase b duty </td></tr>
     <tr><td class="paramdir">[in]</td><td class="paramname">c</td><td>Phase c duty </td></tr>
+  </table>
+  </dd>
+</dl>
+
+</div>
+</div>
+<a class="anchor" id="ga16e8a9920f71e4f0ecf8843f06f2cbd5"></a>
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">void mcfSetForcedCommutationFrequency </td>
+          <td>(</td>
+          <td class="paramtype">float&#160;</td>
+          <td class="paramname"><em>in</em></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>Sets the motor in forced commutation with the given frequency. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramdir">[in]</td><td class="paramname">in</td><td>the mechanical frequency to spin </td></tr>
+  </table>
+  </dd>
+</dl>
+
+</div>
+</div>
+<a class="anchor" id="ga711a95f3011d926019808a9a5e981d54"></a>
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">void mcfSetMotorLock </td>
+          <td>(</td>
+          <td class="paramtype">uint8_t&#160;</td>
+          <td class="paramname"><em>in</em></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>Lock or release the motor. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramdir">[in]</td><td class="paramname">in</td><td>1 for lock </td></tr>
   </table>
   </dd>
 </dl>

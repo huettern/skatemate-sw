@@ -5,6 +5,7 @@ var drv8301_8h =
     [ "DRV_DCCAL_PORT", "group___m_c.html#ga602c3ac503b55db28d0859a6d9b0cb9f", null ],
     [ "DRV_EN_GATE_PIN", "group___m_c.html#gab9417218a2e69a27a8b4d9838c099af5", null ],
     [ "DRV_EN_GATE_PORT", "group___m_c.html#ga7659ea0673457d19510adc78f1108a91", null ],
+    [ "DRV_FLT_FET_MASK", "group___m_c.html#ga066ea02348f427d9ff644757db06f941", null ],
     [ "DRV_INH_A_PIN", "group___m_c.html#ga7f36db47e8e6c5b85f9c37a4827f7c16", null ],
     [ "DRV_INH_A_PORT", "group___m_c.html#ga1de10e794141cbbf9a63481626cad1b7", null ],
     [ "DRV_INH_B_PIN", "group___m_c.html#ga687f9d26a9742242893a011f13b4ca25", null ],
@@ -41,6 +42,20 @@ var drv8301_8h =
     [ "drvGateDisable", "group___m_c.html#gafe9f042a763216a48e8a536d09531415", null ],
     [ "drvGateEnable", "group___m_c.html#ga677631060a9e947ca82b6097403a81cb", null ],
     [ "drvIsFault", "group___m_c.html#ga475cdc9412f72793fefa9d32328788f2", null ],
+    [ "drvFault_t", "group___m_c.html#ga9b48a0be2c8562c5dbb3e907e10e99ae", [
+      [ "DRV_FLT_FETLC_OC", "group___m_c.html#gga9b48a0be2c8562c5dbb3e907e10e99aea50056701b3da35cd3c5e086102cb0fcf", null ],
+      [ "DRV_FLT_FETHC_OC", "group___m_c.html#gga9b48a0be2c8562c5dbb3e907e10e99aeac3605dcf65caa8663e1f28bff60afc07", null ],
+      [ "DRV_FLT_FETLB_OC", "group___m_c.html#gga9b48a0be2c8562c5dbb3e907e10e99aea02cb62d3b952b2b346e3ac5183e5c015", null ],
+      [ "DRV_FLT_FETHB_OC", "group___m_c.html#gga9b48a0be2c8562c5dbb3e907e10e99aeaf9ef1b1457198b85cfda5b0bb37980e9", null ],
+      [ "DRV_FLT_FETLA_OC", "group___m_c.html#gga9b48a0be2c8562c5dbb3e907e10e99aea98125ea516ee6183de5f5ba42d101f21", null ],
+      [ "DRV_FLT_FETHA_OC", "group___m_c.html#gga9b48a0be2c8562c5dbb3e907e10e99aeaedc2a6dd0cbf4a4ba75f26c274cf5a4d", null ],
+      [ "DRV_FLT_OTW", "group___m_c.html#gga9b48a0be2c8562c5dbb3e907e10e99aea90bb4622ea75f5fbf404dbecb9aafd5b", null ],
+      [ "DRV_FLT_OTSD", "group___m_c.html#gga9b48a0be2c8562c5dbb3e907e10e99aeac737e7a063ea919911966d708e08385e", null ],
+      [ "DRV_FLT_PVDD_UV", "group___m_c.html#gga9b48a0be2c8562c5dbb3e907e10e99aead5d64bb678919f784aeba5d830b19c32", null ],
+      [ "DRV_FLT_GVDD_UV", "group___m_c.html#gga9b48a0be2c8562c5dbb3e907e10e99aeacc5b9397768c88139027543c794e7cce", null ],
+      [ "DRV_FLT_GVDD_OV", "group___m_c.html#gga9b48a0be2c8562c5dbb3e907e10e99aea63337594078c343cad0958b3548a1363", null ]
+    ] ],
     [ "drvDumpStatus", "group___m_c.html#ga2ea9f5ade7c2c54756bc4285ca3604c9", null ],
+    [ "drvGetFault", "group___m_c.html#gad9c8cd5f4ab7184637e6c17ef2e4c8f9", null ],
     [ "drvInit", "group___m_c.html#ga2ebb655e2855b35909209bf7cbf00b5d", null ]
 ];

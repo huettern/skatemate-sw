@@ -15,6 +15,12 @@ var defs_8h =
     [ "DEFS_THD_MCFOCSECOND_WA_SIZE", "group___m_a_i_n.html#gae48965f42ebb9a91424a9222e74131ad", null ],
     [ "DEFS_THD_SHELL_NAME", "group___m_a_i_n.html#gab8f481f729b75afa4aa61ee4127bb8a0", null ],
     [ "DEFS_THD_SHELL_WA_SIZE", "group___m_a_i_n.html#ga82d6fe1f6a2f107878f25ac8b990de43", null ],
+    [ "LED_BLU_OFF", "group___m_a_i_n.html#gab6b02ae6620f2ffd56477fcd549ce843", null ],
+    [ "LED_BLU_ON", "group___m_a_i_n.html#ga1d6e68e87f78d1b28d269cbb0ebe65e3", null ],
+    [ "LED_GRN_OFF", "group___m_a_i_n.html#ga465b5334a583fa474e2672adf1ff98e2", null ],
+    [ "LED_GRN_ON", "group___m_a_i_n.html#ga3fdac874f894ea28ae9aa0ea11981b71", null ],
+    [ "LED_RED_OFF", "group___m_a_i_n.html#ga327a94a460a470f29977db858d8074e1", null ],
+    [ "LED_RED_ON", "group___m_a_i_n.html#ga95ee068e1e61fe45d00e66a1bfee85d1", null ],
     [ "PLL_CLOCK", "group___m_a_i_n.html#gaa70b27c2c6af046fb9adde5a94c3044a", null ],
     [ "SYSTEM_CORE_CLOCK", "group___m_a_i_n.html#ga203e46be358e8b2504b821df08d80c76", null ]
 ];

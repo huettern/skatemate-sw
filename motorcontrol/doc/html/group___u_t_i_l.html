@@ -125,6 +125,9 @@ Macros</h2></td></tr>
 <tr class="memitem:ga62f264260b0bb26325168badbda7a586"><td class="memItemLeft" align="right" valign="top">#define&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group___u_t_i_l.html#ga62f264260b0bb26325168badbda7a586">UTIL_LP_FAST</a>(value,  sample,  filter_constant)&#160;&#160;&#160;(value -= (filter_constant) * (value - (sample)))</td></tr>
 <tr class="memdesc:ga62f264260b0bb26325168badbda7a586"><td class="mdescLeft">&#160;</td><td class="mdescRight">Simple low pass filter.  <a href="#ga62f264260b0bb26325168badbda7a586">More...</a><br /></td></tr>
 <tr class="separator:ga62f264260b0bb26325168badbda7a586"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:ga8c5ff70b6b28cd0157c50a22406f92c4"><td class="memItemLeft" align="right" valign="top"><a class="anchor" id="ga8c5ff70b6b28cd0157c50a22406f92c4"></a>
+#define&#160;</td><td class="memItemRight" valign="bottom"><b>SIGN</b>(x)&#160;&#160;&#160;((x&lt;0)?-1:1)</td></tr>
+<tr class="separator:ga8c5ff70b6b28cd0157c50a22406f92c4"><td class="memSeparator" colspan="2">&#160;</td></tr>
 </table><table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 class="groupheader"><a name="func-members"></a>
 Functions</h2></td></tr>
@@ -155,6 +158,9 @@ Functions</h2></td></tr>
 <tr class="memitem:ga9fb8c6ac338320c6c99d4ac926443fa8"><td class="memItemLeft" align="right" valign="top">float&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group___u_t_i_l.html#ga9fb8c6ac338320c6c99d4ac926443fa8">stof</a> (const char *s)</td></tr>
 <tr class="memdesc:ga9fb8c6ac338320c6c99d4ac926443fa8"><td class="mdescLeft">&#160;</td><td class="mdescRight">Simple string to float conversion.  <a href="#ga9fb8c6ac338320c6c99d4ac926443fa8">More...</a><br /></td></tr>
 <tr class="separator:ga9fb8c6ac338320c6c99d4ac926443fa8"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:ga4325cadf5b6972a7c79ee0b8baa098c8"><td class="memItemLeft" align="right" valign="top">float&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="group___u_t_i_l.html#ga4325cadf5b6972a7c79ee0b8baa098c8">wrapAngle</a> (float in)</td></tr>
+<tr class="memdesc:ga4325cadf5b6972a7c79ee0b8baa098c8"><td class="mdescLeft">&#160;</td><td class="mdescRight">Wraps an radial angle to fit inside [0 2pi].  <a href="#ga4325cadf5b6972a7c79ee0b8baa098c8">More...</a><br /></td></tr>
+<tr class="separator:ga4325cadf5b6972a7c79ee0b8baa098c8"><td class="memSeparator" colspan="2">&#160;</td></tr>
 </table>
 <a name="details" id="details"></a><h2 class="groupheader">Detailed Description</h2>
 <p>Utility finctions. </p>
@@ -517,6 +523,31 @@ WARNING: Don't use too large angles.</dd></dl>
   </dd>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>True if saturation happened, false otherwise </dd></dl>
+
+</div>
+</div>
+<a class="anchor" id="ga4325cadf5b6972a7c79ee0b8baa098c8"></a>
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">float wrapAngle </td>
+          <td>(</td>
+          <td class="paramtype">float&#160;</td>
+          <td class="paramname"><em>in</em></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>Wraps an radial angle to fit inside [0 2pi]. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramdir">[in]</td><td class="paramname">in</td><td>input angle</td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>angle between 0 and 2pi </dd></dl>
 
 </div>
 </div>

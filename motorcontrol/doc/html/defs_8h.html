@@ -170,6 +170,24 @@ Macros</h2></td></tr>
 <tr class="memitem:ga9a3f828f0c2447f15e6a4917f055a4ee"><td class="memItemLeft" align="right" valign="top">
 #define&#160;</td><td class="memItemRight" valign="bottom"><b>DBG3</b>(X, ...)&#160;&#160;&#160;chprintf((BaseSequentialStream *)&amp;SD3, X, ##__VA_ARGS__ )</td></tr>
 <tr class="separator:ga9a3f828f0c2447f15e6a4917f055a4ee"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:ga95ee068e1e61fe45d00e66a1bfee85d1"><td class="memItemLeft" align="right" valign="top">
+#define&#160;</td><td class="memItemRight" valign="bottom"><b>LED_RED_ON</b>()&#160;&#160;&#160;palSetPad(GPIOC, 15)</td></tr>
+<tr class="separator:ga95ee068e1e61fe45d00e66a1bfee85d1"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:ga327a94a460a470f29977db858d8074e1"><td class="memItemLeft" align="right" valign="top">
+#define&#160;</td><td class="memItemRight" valign="bottom"><b>LED_RED_OFF</b>()&#160;&#160;&#160;palClearPad(GPIOC, 15)</td></tr>
+<tr class="separator:ga327a94a460a470f29977db858d8074e1"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:ga3fdac874f894ea28ae9aa0ea11981b71"><td class="memItemLeft" align="right" valign="top">
+#define&#160;</td><td class="memItemRight" valign="bottom"><b>LED_GRN_ON</b>()&#160;&#160;&#160;palSetPad(GPIOC, 13)</td></tr>
+<tr class="separator:ga3fdac874f894ea28ae9aa0ea11981b71"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:ga465b5334a583fa474e2672adf1ff98e2"><td class="memItemLeft" align="right" valign="top">
+#define&#160;</td><td class="memItemRight" valign="bottom"><b>LED_GRN_OFF</b>()&#160;&#160;&#160;palClearPad(GPIOC, 13)</td></tr>
+<tr class="separator:ga465b5334a583fa474e2672adf1ff98e2"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:ga1d6e68e87f78d1b28d269cbb0ebe65e3"><td class="memItemLeft" align="right" valign="top">
+#define&#160;</td><td class="memItemRight" valign="bottom"><b>LED_BLU_ON</b>()&#160;&#160;&#160;palSetPad(GPIOC, 14)</td></tr>
+<tr class="separator:ga1d6e68e87f78d1b28d269cbb0ebe65e3"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:gab6b02ae6620f2ffd56477fcd549ce843"><td class="memItemLeft" align="right" valign="top">
+#define&#160;</td><td class="memItemRight" valign="bottom"><b>LED_BLU_OFF</b>()&#160;&#160;&#160;palClearPad(GPIOC, 14)</td></tr>
+<tr class="separator:gab6b02ae6620f2ffd56477fcd549ce843"><td class="memSeparator" colspan="2">&#160;</td></tr>
 </table>
 <a name="details" id="details"></a><h2 class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>Thread and debugging definitions. </p>

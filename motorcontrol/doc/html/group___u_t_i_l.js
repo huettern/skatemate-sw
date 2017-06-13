@@ -9,5 +9,6 @@ var group___u_t_i_l =
     [ "stof", "group___u_t_i_l.html#ga9fb8c6ac338320c6c99d4ac926443fa8", null ],
     [ "utilFastAtan2", "group___u_t_i_l.html#gae0a4f2f8ae1e07e8af31754f48849c46", null ],
     [ "utils_norm_angle_rad", "group___u_t_i_l.html#gaf83ec773d8c5d23f50b870ad0b6c0afd", null ],
-    [ "utils_saturate_vector_2d", "group___u_t_i_l.html#ga3bb3383890bef303ae932e542f869410", null ]
+    [ "utils_saturate_vector_2d", "group___u_t_i_l.html#ga3bb3383890bef303ae932e542f869410", null ],
+    [ "wrapAngle", "group___u_t_i_l.html#ga4325cadf5b6972a7c79ee0b8baa098c8", null ]
 ];

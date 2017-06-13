@@ -46,5 +46,6 @@ var drv8301_8c =
     [ "SR2_DEVICE_ID", "group___m_c.html#gab9c8cb31fcc922b5568e9b0e7f767714", null ],
     [ "SR2_GVDD_OV", "group___m_c.html#ga8c24a089aac8db5f1c2e24c09247a964", null ],
     [ "drvDumpStatus", "group___m_c.html#ga2ea9f5ade7c2c54756bc4285ca3604c9", null ],
+    [ "drvGetFault", "group___m_c.html#gad9c8cd5f4ab7184637e6c17ef2e4c8f9", null ],
     [ "drvInit", "group___m_c.html#ga2ebb655e2855b35909209bf7cbf00b5d", null ]
 ];
