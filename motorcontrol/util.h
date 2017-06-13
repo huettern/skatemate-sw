@@ -48,6 +48,7 @@
  */
 #define UTIL_LP_FAST(value, sample, filter_constant) (value -= (filter_constant) * (value - (sample)))
 
+#define SIGN(x) ((x<0)?-1:1)
 /*===========================================================================*/
 /* UTIL public functions.                                                    */
 /*===========================================================================*/
@@ -61,5 +62,6 @@ bool utils_saturate_vector_2d(float *x, float *y, float max);
 void utils_norm_angle_rad(float *angle);
 void sincos_fast(float angle, float *sin, float *cos);
 float stof(const char* s);
+float wrapAngle(float in);
 
 /** @} */

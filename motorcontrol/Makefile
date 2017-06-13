@@ -5,7 +5,7 @@
 
 # Compiler options here.
 ifeq ($(USE_OPT),)
-  USE_OPT = -O0 -ggdb -fomit-frame-pointer -falign-functions=16
+  USE_OPT = -O2 -ggdb -fomit-frame-pointer -falign-functions=16
 endif
 
 # C specific options here (added to USE_OPT).
@@ -118,7 +118,7 @@ include $(F3STDPERIPH)/stm32f3_stdperiph.mk
 
 
 # Define linker script file here
-LDSCRIPT= $(STARTUPLD)/STM32F303xC.ld
+LDSCRIPT= $(STARTUPLD)/STM32F303xE.ld
 
 # C sources that can be compiled in ARM or THUMB mode depending on the global
 # setting.
@@ -253,11 +253,11 @@ OPENOCD = openocd
 
 TARGET = build/$(PROJECT)
 
-OOCD_INIT  += -f board/stm32f3discovery.cfg
+OOCD_INIT  += -f openocd.cfg
 OOCD_INIT  += -c "adapter_khz 1800"
 OOCD_INIT  += -c init
 OOCD_INIT  += -c "reset init"
-#OOCD_INIT += -c "targets"
+OOCD_INIT += -c "targets"
 
 #OOCD_FLASH = -c "reset halt"
 OOCD_FLASH += -c "flash write_image erase $(TARGET).elf"
@@ -273,8 +273,12 @@ OOCD_FLASH += -c shutdown
 RULESPATH = $(CHIBIOS)/os/common/ports/ARMCMx/compilers/GCC
 include $(RULESPATH)/rules.mk
 
-doc: doxygen
+doc:
+	mkdir doc
 	doxygen doxygen.cfg
+
+cleandoc:
+	rm -rf doc
 
 flash: $(TARGET).elf
 	$(OPENOCD) $(OOCD_INIT) $(OOCD_FLASH)
@@ -287,4 +291,4 @@ killgdbserver:
 	# @echo "shutdown" | telnet localhost 4444
 	killall openocd
 
-.PHONY: flash gdbserver killgdbserver doc
+.PHONY: flash gdbserver killgdbserver doc cleandoc

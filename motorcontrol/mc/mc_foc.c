@@ -70,11 +70,11 @@
  * FOC PWM output deadtime cycles. refer to p.592 of reference manual
  * allowed value 0..255
  */
-#define FOC_PWM_DEADTIME_CYCLES 0 // cycles
+#define FOC_PWM_DEADTIME_CYCLES 20 // cycles
 /**
  * How fast the control thread should run
  */
-#define FOC_THREAD_INTERVAL 100 // us
+#define FOC_THREAD_INTERVAL 100 // ms
 /**
  * How much slower the current control loop should run
  */
@@ -90,13 +90,13 @@
 /**
  * Forced commutation settings
  */
-#define FOC_FORCED_COMM_FREQ -30.0
+#define FOC_FORCED_COMM_FREQ 30.0
 #define FOC_FORCED_COMM_VD 0.0
 #define FOC_FORCED_COMM_VQ 0.07
 /**
  * Maximum current
  */
-#define FOC_PARAM_DEFAULT_CURR_MAX 10.0
+#define FOC_PARAM_DEFAULT_CURR_MAX 20.0
 /**
  * is the abs value of the current factor below this value, the motor will be
  * released
@@ -109,7 +109,7 @@
 #define FOC_MOTOR_DEFAULT_PSI 15.0e-3 //0.008
 #define FOC_MOTOR_DEFAULT_P   7
 #define FOC_MOTOR_DEFAULT_LS  35.0e-6 //18.0e-6 // Lumenier: 12e-6
-#define FOC_MOTOR_DEFAULT_RS  20*0.04 // 1.2 // Lumenier: 0.06
+#define FOC_MOTOR_DEFAULT_RS  0.1 // 0.04 // 1.2 // Lumenier: 0.06
 #define FOC_MOTOR_DEFAULT_J   150e-6 // not used
 // vedder measured
 // #define FOC_MOTOR_DEFAULT_PSI 2.7e-3
@@ -127,11 +127,14 @@
 #define FOC_PARAM_DEFAULT_OBS_SPEED_ITERM_MAX  10.0
 #define FOC_PARAM_DEFAULT_OBS_SPEED_ITERM_MIN  -10.0
 
-#define FOC_PARAM_DEFAULT_CURR_D_KP   0.1
-#define FOC_PARAM_DEFAULT_CURR_D_KI   20.0
-
-#define FOC_PARAM_DEFAULT_CURR_Q_KP   0.3
-#define FOC_PARAM_DEFAULT_CURR_Q_KI   20.0
+// #define FOC_PARAM_DEFAULT_CURR_D_KP   0.3
+// #define FOC_PARAM_DEFAULT_CURR_D_KI   10.0
+// #define FOC_PARAM_DEFAULT_CURR_Q_KP   0.3
+// #define FOC_PARAM_DEFAULT_CURR_Q_KI   10.0
+#define FOC_PARAM_DEFAULT_CURR_D_KP   0.01
+#define FOC_PARAM_DEFAULT_CURR_D_KI   0.0
+#define FOC_PARAM_DEFAULT_CURR_Q_KP   0.01
+#define FOC_PARAM_DEFAULT_CURR_Q_KI   0.0
 
 #define FOC_PARAM_DEFAULT_ITERM_CEIL     100.0
 #define FOC_PARAM_DEFAULT_ITERM_FLOOR    -100.0
@@ -221,7 +224,7 @@ static volatile uint16_t mADCValueStore[ADC_STORE_DEPTH][8]; // raw converted va
 static volatile uint8_t mStoreADC1, mStoreADC3;
 
 #ifdef DEBUG_OBSERVER
-  #define OBS_STORE_DEPTH 1000
+  #define OBS_STORE_DEPTH 800
 #else
   #define OBS_STORE_DEPTH 1
 #endif
@@ -230,7 +233,7 @@ static volatile uint8_t mStoreObserver;
 static uint16_t mObsDebugCounter;
 
 #ifdef DEBUG_CONTROLLERS
-  #define CONT_STORE_DEPTH 200
+  #define CONT_STORE_DEPTH 800
 #else
   #define CONT_STORE_DEPTH 1
 #endif
@@ -240,13 +243,16 @@ static uint16_t mControllerDebugCtr;
 static uint8_t mStartStore = 0;
 
 #ifdef DEBUG_SVM
-  #define SVM_STORE_DEPTH 800
+  #define SVM_STORE_DEPTH 1000
 #else
   #define SVM_STORE_DEPTH 1
 #endif
 static volatile float mSVMValueStore[SVM_STORE_DEPTH][7];
 static volatile uint8_t mStoreSVM;
 static uint16_t mSVMDebugCtr;
+
+static char mIsrDbgString[80];
+#define DBGISR(X, ...) chsnprintf(mIsrDbgString, sizeof(mIsrDbgString), X, ##__VA_ARGS__ )
 
 static float mForcedCommFreq = 0;
 static float mForcedCommVd = 0;
@@ -266,6 +272,7 @@ static float mMeasuredResistance = 0;
 static float mdtMeasure;
 static float mdt;
 
+
 /*===========================================================================*/
 /* SHELL settings                                                            */
 /*===========================================================================*/
@@ -277,10 +284,12 @@ static const usbcdcParameterStruct_t mShellcurr_qKp = {"curr_q_kp", &mpiIq.kp};
 static const usbcdcParameterStruct_t mShellcurr_qKi = {"curr_q_ki", &mpiIq.ki};
 static const usbcdcParameterStruct_t mShellSpeedKp = {"speed_kp", &mpiSpeed.kp};
 static const usbcdcParameterStruct_t mShellSpeedKi = {"speed_ki", &mpiSpeed.ki};
-static const usbcdcParameterStruct_t mShellObsGain = {"obs_gain", &mFOCParms.obsGain};
 static const usbcdcParameterStruct_t mShellwSet = {"w_set", &mCtrl.w_set};
 static const usbcdcParameterStruct_t mShellIdSet = {"id_set", &mCtrl.id_set};
 static const usbcdcParameterStruct_t mShellIqSet = {"iq_set", &mCtrl.iq_set};
+static const usbcdcParameterStruct_t mShellfcf = {"fc_f", &mForcedCommFreq};
+static const usbcdcParameterStruct_t mShellfcd = {"fc_vd", &mForcedCommVd};
+static const usbcdcParameterStruct_t mShellfcq = {"fc_vq", &mForcedCommVq};
 
 static const usbcdcParameterStruct_t mShellL = {"ls", &mMotParms.Ls};
 static const usbcdcParameterStruct_t mShellR = {"rs", &mMotParms.Rs};
@@ -295,7 +304,6 @@ static const usbcdcParameterStruct_t* mShellVars[] =
   &mShellcurr_dKi,
   &mShellcurr_qKp,
   &mShellcurr_qKi,
-  &mShellObsGain,
   &mShellwSet,
   &mShellSpeedKp,
   &mShellSpeedKi,
@@ -305,6 +313,9 @@ static const usbcdcParameterStruct_t* mShellVars[] =
   &mShellR,
   &mShellPSI,
   &mShellLambda,
+  &mShellfcf,
+  &mShellfcd,
+  &mShellfcq,
   NULL
 };
 
@@ -347,14 +358,11 @@ static const usbcdcParameterStruct_t* mShellVars[] =
 #define ADC_STORE_VOLT(i, ch) ( (float)mADCValueStore[i][ch] * mADCtoVoltsFactor)
 /**
  * @brief      Returns the current in the shunt resister
- * @note       TODO: Remove minus for new revision!!!
- * @note       TODO: Removed the minus again on old hardware but why???
  */
 #define ADC_CURR_A() ( ((float)mADCValue[ADC_CH_CURR_A]-mDrvOffA) * mADCtoAmpsFactor )
-// TODO: This 2.2 is a measured difference between the 2 currnet sense outputs from the drv
-#define ADC_CURR_B() ( ((float)mADCValue[ADC_CH_CURR_B]-mDrvOffB) * mADCtoAmpsFactor / 2.2) 
-#define ADC_STORE_CURR_A(i) ( ((float)mADCValueStore[i][ADC_CH_CURR_A]-mDrvOffA) * -mADCtoAmpsFactor )
-#define ADC_STORE_CURR_B(i) ( ((float)mADCValueStore[i][ADC_CH_CURR_B]-mDrvOffB) * -mADCtoAmpsFactor )
+#define ADC_CURR_B() ( ((float)mADCValue[ADC_CH_CURR_B]-mDrvOffB) * mADCtoAmpsFactor ) 
+#define ADC_STORE_CURR_A(i) ( ((float)mADCValueStore[i][ADC_CH_CURR_A]-mDrvOffA) * mADCtoAmpsFactor )
+#define ADC_STORE_CURR_B(i) ( ((float)mADCValueStore[i][ADC_CH_CURR_B]-mDrvOffB) * mADCtoAmpsFactor )
 /**
  * @brief      Returns the current temperature
  */
@@ -376,7 +384,9 @@ static void clark (float* va, float* vb, float* vc, float* a, float* b);
 static void park (float* a, float* b, float* theta, float* d, float* q );
 static void invclark (float* a, float* b, float* va, float* vb, float* vc);
 static void invpark (float* d, float* q, float* theta, float* a, float* b);
+
 static float piController(piStruct_t* s, float sample, float* dt);
+static void deadtimeComp (float* alpha, float* beta);
 
 static void runPositionObserver(float dt);
 static void runSpeedObserver (float dt);
@@ -384,7 +394,7 @@ static void runSpeedController (float dt);
 static void runCurrentController (float *dt);
 static void runOutputs(void);
 static void runOutputsWithoutObserver(float theta);
-static void forcedCommutation (void);
+static void forcedCommutation (float dt);
 
 /*===========================================================================*/
 /* Module public functions.                                                  */
@@ -719,11 +729,11 @@ void mcfSetCurrentFactor(float in)
   }
   else
   {
-    if(mState == MC_HALT)
+    if(mState != MC_CLOSED_LOOP_CURRENT)
     {
       // factor is outside deadband but the motor is released
-      mState = MC_CLOSED_LOOP_CURRENT;
       mCtrl.iq_set = in * FOC_PARAM_DEFAULT_CURR_MAX;
+      mState = MC_CLOSED_LOOP_CURRENT;
       lockMotor();
     }
     else
@@ -735,17 +745,66 @@ void mcfSetCurrentFactor(float in)
 }
 
 /**
+ * @brief      Set the current from min current to max current
+ *
+ * @param[in]  in    from -1.0 to 1.0
+ */
+void mcfSetCurrent(float in)
+{
+  mcfSetCurrentFactor(in* (1.0/FOC_PARAM_DEFAULT_CURR_MAX));
+}
+
+/**
+ * @brief      Lock or release the motor
+ *
+ * @param[in]  in    1 for lock
+ */
+void mcfSetMotorLock(uint8_t in)
+{
+  if(in)
+  {
+    lockMotor();
+  }
+  else
+  {
+    releaseMotor();
+  }
+}
+/**
+ * @brief      Sets the motor in forced commutation with the given frequency
+ *
+ * @param[in]  in    the mechanical frequency to spin
+ */
+void mcfSetForcedCommutationFrequency(float in)
+{
+  if(in == 0.0)
+  {
+    mState = MC_HALT;
+    releaseMotor();
+    return;
+  }
+  if(mState != MC_OPEN_LOOP)
+  {
+    mForcedCommFreq = in * mMotParms.p;
+    mState = MC_OPEN_LOOP;
+    lockMotor();
+    return;
+  }
+  mForcedCommFreq = in * mMotParms.p;
+}
+
+/**
  * @brief      Dumps the local data to the debug stream
  */
 void mcfDumpData(void)
 {
-  DBG2("\r\n--- ADC ---\r\n");
-  DBG2("          ph_C |     ph_B |     ph_A |     v_in |    cur_b |    cur_a |     temp |     vref\r\n");
-  DBG2("raw       %04d |     %04d |     %04d |     %04d |     %04d |     %04d |     %04d |     %04d\r\n", mADCValue[0], mADCValue[1],
+  DBG3("\r\n--- ADC ---\r\n");
+  DBG3("          ph_C |     ph_B |     ph_A |     v_in |    cur_b |    cur_a |     temp |     vref\r\n");
+  DBG3("raw       %04d |     %04d |     %04d |     %04d |     %04d |     %04d |     %04d |     %04d\r\n", mADCValue[0], mADCValue[1],
     mADCValue[2], mADCValue[3], mADCValue[4], mADCValue[5], mADCValue[6], mADCValue[7]);
-  DBG2("pin    %7.3f |  %7.3f |  %7.3f |  %7.3f |  %7.3f |  %7.3f |  %7.3f |  %7.3f\r\n", ADC_PIN(0), ADC_PIN(1),
+  DBG3("pin    %7.3f |  %7.3f |  %7.3f |  %7.3f |  %7.3f |  %7.3f |  %7.3f |  %7.3f\r\n", ADC_PIN(0), ADC_PIN(1),
     ADC_PIN(2), ADC_PIN(3), ADC_PIN(4), ADC_PIN(5), ADC_PIN(6), ADC_PIN(7));
-  DBG2("SI     %7.3f |  %7.3f |  %7.3f |  %7.3f |  %7.3f |  %7.3f |  %7.3f\r\n", ADC_VOLT(0), ADC_VOLT(1),
+  DBG3("SI     %7.3f |  %7.3f |  %7.3f |  %7.3f |  %7.3f |  %7.3f |  %7.3f\r\n", ADC_VOLT(0), ADC_VOLT(1),
     ADC_VOLT(2), ADC_VOLT(3), ADC_CURR_A(), ADC_CURR_B(), ADC_TEMP(6));
 
   // ADC_StartConversion(ADC1);
@@ -822,7 +881,65 @@ static THD_FUNCTION(mcfocMainThread, arg) {
   // mState = MC_CLOSED_LOOP_CURRENT;
   while (true) 
   {
-    chThdSleepMilliseconds(4000);
+    chThdSleepMilliseconds(FOC_THREAD_INTERVAL);
+
+    if(mIsrDbgString[0] != 0)
+    {
+      DBG3("%s", mIsrDbgString);
+      mIsrDbgString[0] = 0;
+    }
+
+    /**
+     * Check driver status
+     */
+    drvFault_t drvFaults;
+    static uint8_t redLedBlinkPattern = 0;
+    static uint8_t redLedBlinkPatternCtr = 0;
+    if(drvIsFault())
+    {
+      DBG3("-----DRV FAULT-----\r\n");
+      drvFaults = drvGetFault();
+      DBG3("code: %d\r\n", drvFaults);
+      // if(drvFaults & DRV_FLT_FET_MASK)
+      // { 
+      //   redLedBlinkPattern = 1;
+      //   DBG3("FET overcurrent\r\n");
+      // }
+      // if(drvFaults & DRV_FLT_OTW)
+      // {
+      //   redLedBlinkPattern = 2;
+      //   DBG3("Overtemp Warning\r\n");
+      // }
+      // if(drvFaults & DRV_FLT_OTSD)
+      // {
+      //   redLedBlinkPattern = 3;
+      //   DBG3("Overtemp\r\n");
+      // }
+      // if(drvFaults & DRV_FLT_PVDD_UV)
+      // {
+      //   redLedBlinkPattern = 4;
+      //   DBG3("PVDD Untervolt\r\n");
+      // }
+      // if(drvFaults & DRV_FLT_GVDD_UV)
+      // {
+      //   redLedBlinkPattern = 5;
+      //   DBG3("GVDD Undervolt\r\n");
+      // }
+      // if(drvFaults & DRV_FLT_GVDD_OV)
+      // {
+      //   redLedBlinkPattern = 6;
+      //   DBG3("GVDD Overvolt\r\n");
+      // }
+    }
+    else
+    {
+      redLedBlinkPattern = 0;
+    }
+    // Blink LED accordingly
+    redLedBlinkPatternCtr++;
+    redLedBlinkPatternCtr%=20;
+    if(redLedBlinkPatternCtr % 2) LED_RED_OFF();
+    else if(redLedBlinkPatternCtr <= (redLedBlinkPattern*2-2)) LED_RED_ON();
   }
 }
 
@@ -1033,8 +1150,159 @@ static void drvDCCal(void)
  */
 static void svm (float* a, float* b, uint16_t* da, uint16_t* db, uint16_t* dc)
 {
-  uint8_t sector;
+// #define USE_SINE_PWM
+// #define USE_VEDDER_SVM
+ #define USE_OWN_SVPWM
+
+#ifdef USE_SINE_PWM
+  float pa, pb, pc;
   float pwmHalfPeriod = TIM1->ARR;
+
+  invclark(a, b, &pa, &pb, &pc);
+
+  *da = (uint16_t)(pwmHalfPeriod*(pa+0.5));
+  *db = (uint16_t)(pwmHalfPeriod*(pb+0.5));
+  *dc = (uint16_t)(pwmHalfPeriod*(pc+0.5));  
+#endif
+
+#ifdef USE_VEDDER_SVM
+  uint32_t sector;
+
+  float alpha = *a;
+  float beta = *b;
+  uint32_t PWMHalfPeriod = TIM1->ARR;
+  uint16_t* tAout =da;
+  uint16_t* tBout =db;
+  uint16_t* tCout =dc;
+
+  if (beta >= 0.0f) {
+    if (alpha >= 0.0f) {
+      //quadrant I
+      if (ONE_BY_SQRT_3 * beta > alpha)
+        sector = 2;
+      else
+        sector = 1;
+    } else {
+      //quadrant II
+      if (-ONE_BY_SQRT_3 * beta > alpha)
+        sector = 3;
+      else
+        sector = 2;
+    }
+  } else {
+    if (alpha >= 0.0f) {
+      //quadrant IV5
+      if (-ONE_BY_SQRT_3 * beta > alpha)
+        sector = 5;
+      else
+        sector = 6;
+    } else {
+      //quadrant III
+      if (ONE_BY_SQRT_3 * beta > alpha)
+        sector = 4;
+      else
+        sector = 5;
+    }
+  }
+
+  // PWM timings
+  uint32_t tA, tB, tC;
+
+  switch (sector) {
+
+  // sector 1-2
+  case 1: {
+    // Vector on-times
+    uint32_t t1 = (alpha - ONE_BY_SQRT_3 * beta) * PWMHalfPeriod;
+    uint32_t t2 = (TWO_BY_SQRT_3 * beta) * PWMHalfPeriod;
+
+    // PWM timings
+    tA = (PWMHalfPeriod - t1 - t2) / 2;
+    tB = tA + t1;
+    tC = tB + t2;
+
+    break;
+  }
+
+  // sector 2-3
+  case 2: {
+    // Vector on-times
+    uint32_t t2 = (alpha + ONE_BY_SQRT_3 * beta) * PWMHalfPeriod;
+    uint32_t t3 = (-alpha + ONE_BY_SQRT_3 * beta) * PWMHalfPeriod;
+
+    // PWM timings
+    tB = (PWMHalfPeriod - t2 - t3) / 2;
+    tA = tB + t3;
+    tC = tA + t2;
+
+    break;
+  }
+
+  // sector 3-4
+  case 3: {
+    // Vector on-times
+    uint32_t t3 = (TWO_BY_SQRT_3 * beta) * PWMHalfPeriod;
+    uint32_t t4 = (-alpha - ONE_BY_SQRT_3 * beta) * PWMHalfPeriod;
+
+    // PWM timings
+    tB = (PWMHalfPeriod - t3 - t4) / 2;
+    tC = tB + t3;
+    tA = tC + t4;
+
+    break;
+  }
+
+  // sector 4-5
+  case 4: {
+    // Vector on-times
+    uint32_t t4 = (-alpha + ONE_BY_SQRT_3 * beta) * PWMHalfPeriod;
+    uint32_t t5 = (-TWO_BY_SQRT_3 * beta) * PWMHalfPeriod;
+
+    // PWM timings
+    tC = (PWMHalfPeriod - t4 - t5) / 2;
+    tB = tC + t5;
+    tA = tB + t4;
+
+    break;
+  }
+
+  // sector 5-6
+  case 5: {
+    // Vector on-times
+    uint32_t t5 = (-alpha - ONE_BY_SQRT_3 * beta) * PWMHalfPeriod;
+    uint32_t t6 = (alpha - ONE_BY_SQRT_3 * beta) * PWMHalfPeriod;
+
+    // PWM timings
+    tC = (PWMHalfPeriod - t5 - t6) / 2;
+    tA = tC + t5;
+    tB = tA + t6;
+
+    break;
+  }
+
+  // sector 6-1
+  case 6: {
+    // Vector on-times
+    uint32_t t6 = (-TWO_BY_SQRT_3 * beta) * PWMHalfPeriod;
+    uint32_t t1 = (alpha + ONE_BY_SQRT_3 * beta) * PWMHalfPeriod;
+
+    // PWM timings
+    tA = (PWMHalfPeriod - t6 - t1) / 2;
+    tC = tA + t1;
+    tB = tC + t6;
+
+    break;
+  }
+  }
+
+  *tAout = tA;
+  *tBout = tB;
+  *tCout = tC;
+#endif
+
+#ifdef USE_OWN_SVPWM
+  uint8_t sector;
+  float pwmHalfPeriod = (float)TIM1->ARR;
 
   float Ta, Tb, T0;
   float ta, tb, tc;
@@ -1042,11 +1310,16 @@ static void svm (float* a, float* b, uint16_t* da, uint16_t* db, uint16_t* dc)
   float va = *a;
   float vb = (*b)*ONE_BY_SQRT_3;
 
+  // uint8_t kn = 0; // 2 phase modulation clamp to low rail
+  float kn = 1; // 3 phase modulation
+  // uint8_t kn = 2; // 2 phase modulation clamp to high rail
+
   if(fabsf(va) >= fabsf(vb))
   {
     Ta=fabsf(va)-fabsf(vb); // Segment 1,3,4,6
     Tb=fabsf(vb)*2;
-    T0=-Ta-Tb; // assuming Ts = 1;
+    // T0=-Ta-Tb; // assuming Ts = 1;
+    T0=(1-Ta-Tb)*kn-1;
     if (vb >= 0)
     {
       if (va >= 0)
@@ -1088,7 +1361,8 @@ static void svm (float* a, float* b, uint16_t* da, uint16_t* db, uint16_t* dc)
     // Segment 2,5
     Ta=fabsf(va+vb);
     Tb=fabsf(va-vb);
-    T0=-Ta-Tb; // assuming Ts = 1;
+    // T0=-Ta-Tb; // assuming Ts = 1;
+    T0=(1-Ta-Tb)*kn-1;
     if (vb > 0)
     {
       // sector 2
@@ -1107,26 +1381,26 @@ static void svm (float* a, float* b, uint16_t* da, uint16_t* db, uint16_t* dc)
     }
   }
 
+  *da = (uint16_t)(pwmHalfPeriod*(ta+0.5));
+  *db = (uint16_t)(pwmHalfPeriod*(tb+0.5));
+  *dc = (uint16_t)(pwmHalfPeriod*(tc+0.5));  
+#endif   
+
 #ifdef DEBUG_SVM
-  static uint16_t downSampleCtr = 0;
   if(mStoreSVM)
   {
     // copy to store reg
     mSVMDebugCtr %= SVM_STORE_DEPTH;
     mSVMValueStore[mSVMDebugCtr][0] = *a;
     mSVMValueStore[mSVMDebugCtr][1] = *b;
-    mSVMValueStore[mSVMDebugCtr][2] = ta;
-    mSVMValueStore[mSVMDebugCtr][3] = tb;
-    mSVMValueStore[mSVMDebugCtr][4] = tc;
+    mSVMValueStore[mSVMDebugCtr][2] = *da;
+    mSVMValueStore[mSVMDebugCtr][3] = *db;
+    mSVMValueStore[mSVMDebugCtr][4] = *dc;
     mSVMValueStore[mSVMDebugCtr][5] = mObs.theta;
     mSVMValueStore[mSVMDebugCtr++][6] = mObs.omega_e;
     if(mSVMDebugCtr >= SVM_STORE_DEPTH) mStoreSVM = 0;
   }
-#endif
-
-  *da = (uint16_t)(pwmHalfPeriod*(ta+0.5));
-  *db = (uint16_t)(pwmHalfPeriod*(tb+0.5));
-  *dc = (uint16_t)(pwmHalfPeriod*(tc+0.5));        
+#endif   
 }
 
 /**
@@ -1136,12 +1410,15 @@ static void lockMotor(void)
 {
   mpiId.istate = 0.0;
   mpiIq.istate = 0.0;
-  palSetPad(GPIOE, GPIOE_LED7_GREEN);
+  LED_GRN_ON();
+
   palSetPadMode(DRV_INH_A_PORT, DRV_INH_A_PIN, PAL_MODE_ALTERNATE(6) |
                            PAL_STM32_OSPEED_HIGHEST);
-  palSetPadMode(DRV_INH_B_PORT, DRV_INH_B_PIN, PAL_MODE_ALTERNATE(6) |
+  // palSetPadMode(DRV_INH_B_PORT, DRV_INH_B_PIN, PAL_MODE_ALTERNATE(6) |
+  //                          PAL_STM32_OSPEED_HIGHEST);
+  palSetPadMode(GPIOC, 1, PAL_MODE_ALTERNATE(2) |
                            PAL_STM32_OSPEED_HIGHEST);
-  palSetPadMode(DRV_INH_C_PORT, DRV_INH_C_PIN, PAL_MODE_ALTERNATE(6) |
+  palSetPadMode(GPIOC, 0, PAL_MODE_ALTERNATE(2) |
                            PAL_STM32_OSPEED_HIGHEST);
 
   palSetPadMode(DRV_INL_A_PORT, DRV_INL_A_PIN, PAL_MODE_ALTERNATE(4) |
@@ -1150,6 +1427,7 @@ static void lockMotor(void)
                            PAL_STM32_OSPEED_HIGHEST);
   palSetPadMode(DRV_INL_C_PORT, DRV_INL_C_PIN, PAL_MODE_ALTERNATE(6) |
                            PAL_STM32_OSPEED_HIGHEST);
+  
 }
 /**
  * @brief      Disables the highside FETs to release the motor in free drive
@@ -1157,13 +1435,16 @@ static void lockMotor(void)
  */
 static void releaseMotor(void)
 {
-  palClearPad(GPIOE, GPIOE_LED7_GREEN);
+  // palClearPad(GPIOE, GPIOE_LED7_GREEN);
+  LED_GRN_OFF();
   palSetPadMode(DRV_INH_A_PORT, DRV_INH_A_PIN, PAL_MODE_OUTPUT_PUSHPULL);
   palClearPad(DRV_INH_A_PORT, DRV_INH_A_PIN);
-  palSetPadMode(DRV_INH_B_PORT, DRV_INH_B_PIN, PAL_MODE_OUTPUT_PUSHPULL);
-  palClearPad(DRV_INH_B_PORT, DRV_INH_B_PIN);
-  palSetPadMode(DRV_INH_C_PORT, DRV_INH_C_PIN, PAL_MODE_OUTPUT_PUSHPULL);
-  palClearPad(DRV_INH_C_PORT, DRV_INH_C_PIN);
+  // palSetPadMode(DRV_INH_B_PORT, DRV_INH_B_PIN, PAL_MODE_OUTPUT_PUSHPULL);
+  // palClearPad(DRV_INH_B_PORT, DRV_INH_B_PIN);
+  palSetPadMode(GPIOC, 1, PAL_MODE_OUTPUT_PUSHPULL);
+  palClearPad(GPIOC, 1);
+  palSetPadMode(GPIOC, 0, PAL_MODE_OUTPUT_PUSHPULL);
+  palClearPad(GPIOC, 0);
 
   palSetPadMode(DRV_INL_A_PORT, DRV_INL_A_PIN, PAL_MODE_OUTPUT_PUSHPULL);
   palClearPad(DRV_INL_A_PORT, DRV_INL_A_PIN);
@@ -1234,7 +1515,7 @@ static void invclark (float* a, float* b, float* va, float* vb, float* vc)
   #else
     *va = *a;
     *vb = 1.0f / 2.0f * (-(*a) + SQRT_3*(*b));
-    *vc = 1.0f / 2.0f * (-(*a) + SQRT_3*(*b));
+    *vc = 1.0f / 2.0f * (-(*a) - SQRT_3*(*b));
   #endif
 }
 /**
@@ -1254,9 +1535,9 @@ static void invpark (float* d, float* q, float* theta, float* a, float* b)
     arm_sin_cos_f32(*theta, &sin, &cos);
     arm_inv_park_f32(*d, *q, a, b, sin, cos);
   #else
-    sin = arm_sin_f32(*theta);
-    cos = arm_cos_f32(*theta);
-    // sincos_fast(*theta, &sin, &cos);
+    // sin = arm_sin_f32(*theta);
+    // cos = arm_cos_f32(*theta);
+    sincos_fast(*theta, &sin, &cos);
     (*a) = (*d)*cos - (*q)*sin;
     (*b) = (*q)*cos + (*d)*sin;
   #endif
@@ -1380,7 +1661,7 @@ static void runCurrentController (float* dt)
 
   mCtrl.vd_set -= mObs.omega_e * mMotParms.Ls * mCtrl.iq_is;
   mCtrl.vq_set += mObs.omega_e * mMotParms.Ls * mCtrl.id_is;
-  mCtrl.vq_set += mObs.omega_e * 15e-3;
+  mCtrl.vq_set += mObs.omega_e * mMotParms.psi;
 
   mCtrl.vd_set *= 1.0 / ((2.0 / 3.0) * mCtrl.vsupply);
   mCtrl.vq_set *= 1.0 / ((2.0 / 3.0) * mCtrl.vsupply);
@@ -1408,6 +1689,27 @@ static void runCurrentController (float* dt)
 #endif
 }
 
+static void deadtimeComp (float* alpha, float* beta)
+{
+  // Deadtime compensation
+  const float deadtime = FOC_PWM_DEADTIME_CYCLES * (1.0/APB2_CLOCK);
+  const float ia_set = (*alpha);
+  const float ib_set = -0.5 * (*alpha) + SQRT_3_BY_2 * (*beta);
+  const float ic_set = -0.5 * (*alpha) - SQRT_3_BY_2 * (*beta);
+  const float mod_alpha_set_sgn = (2.0 / 3.0) * SIGN(ia_set) - (1.0 / 3.0) * SIGN(ib_set) - (1.0 / 3.0) * SIGN(ic_set);
+  const float mod_beta_set_sgn = ONE_BY_SQRT_3 * SIGN(ib_set) - ONE_BY_SQRT_3 * SIGN(ic_set);
+  const float mod_comp_fact = deadtime * FOC_F_SW;
+  const float mod_alpha_comp = mod_alpha_set_sgn * mod_comp_fact;
+  const float mod_beta_comp = mod_beta_set_sgn * mod_comp_fact;
+
+//  mod_alpha += mod_alpha_comp;
+//  mod_beta += mod_beta_comp;
+
+  // Apply compensation here so that 0 duty cyle has no glitches.
+  *alpha = ((*alpha) - mod_alpha_comp) * (2.0 / 3.0) * mCtrl.vsupply;
+  *beta  = ((*beta) - mod_beta_comp) * (2.0 / 3.0) * mCtrl.vsupply;
+}
+
 /**
  * @brief      Calculate output vectors for the Timer and sets new dutycycle
  * @note       Needs
@@ -1423,6 +1725,8 @@ static void runOutputs(void)
   uint16_t dutya, dutyb, dutyc;
   // inverse transform
   invpark(&mCtrl.vd_set, &mCtrl.vq_set, &mObs.theta, &mCtrl.va_set, &mCtrl.vb_set);
+  // run daedtime compensation
+  // deadtimeComp(&mCtrl.va_set, &mCtrl.vb_set);
   // calculate duties
   utils_saturate_vector_2d(&mCtrl.va_set, &mCtrl.vb_set, SQRT_3_BY_2);
   svm(&mCtrl.va_set, &mCtrl.vb_set, &dutya, &dutyb, &dutyc);
@@ -1458,15 +1762,14 @@ static void runOutputsWithoutObserver(float theta)
 /**
  * @brief      Runs output in forced commutation mode
  */
-static void forcedCommutation (void)
+static void forcedCommutation (float dt)
 {
-  static float t = 0.0;
   static float theta;
 
-  theta = 2*PI*mForcedCommFreq*(t); //800ns
+  theta += 2*PI*mForcedCommFreq*dt;
+  theta = wrapAngle(theta);
   mCtrl.vd_set = mForcedCommVd;
   mCtrl.vq_set = mForcedCommVq;
-  t += ((float)FOC_CURRENT_CONTROLLER_SLOWDOWN / FOC_F_SW);
   runOutputsWithoutObserver(theta);
 }
 
@@ -1477,30 +1780,29 @@ static void forcedCommutation (void)
  * @brief      ADC1_2 IRQ handler
  */
 CH_IRQ_HANDLER(Vector88) {
-  static uint16_t ctr = 0;
-  static float vd, vq;
+  static uint16_t ctr =0;
   static uint16_t voltmeasSlowDownCtr = 0;
   CH_IRQ_PROLOGUE();
   ADC_ClearITPendingBit(ADC1, ADC_IT_EOS);
   ADC1->CR |= ADC_CR_ADSTART;
 
-  if(++voltmeasSlowDownCtr == FOC_VOLT_MEAS_SLOWDOWN)
-  {
-    voltmeasSlowDownCtr = 0;
-    mSample.volt_sum += ADC_VOLT(ADC_CH_SUPPL);
-    mSample.nVoltSamples++;
-  }
-  if(mStoreADC1)
-  {
-    // copy to store reg
-    mADCValueStore[ctr][0] = mADCValue[0];
-    mADCValueStore[ctr][1] = mADCValue[1];
-    mADCValueStore[ctr][2] = mADCValue[2];
-    mADCValueStore[ctr][3] = mADCValue[3];
-    ctr++;
-    if(ctr >= ADC_STORE_DEPTH) mStoreADC1 = 0;
-    ctr %= ADC_STORE_DEPTH;
-  }
+  // if(++voltmeasSlowDownCtr == FOC_VOLT_MEAS_SLOWDOWN)
+  // {
+  //   voltmeasSlowDownCtr = 0;
+  //   mSample.volt_sum += ADC_VOLT(ADC_CH_SUPPL);
+  //   mSample.nVoltSamples++;
+  // }
+  // if(mStoreADC1)
+  // {
+  //   // copy to store reg
+  //   mADCValueStore[ctr][0] = mADCValue[0];
+  //   mADCValueStore[ctr][1] = mADCValue[1];
+  //   mADCValueStore[ctr][2] = mADCValue[2];
+  //   mADCValueStore[ctr][3] = mADCValue[3];
+  //   ctr++;
+  //   if(ctr >= ADC_STORE_DEPTH) mStoreADC1 = 0;
+  //   ctr %= ADC_STORE_DEPTH;
+  // }
 
   // mc_interface_adc_inj_int_handler();
   CH_IRQ_EPILOGUE();
@@ -1518,10 +1820,9 @@ CH_IRQ_HANDLER(VectorFC) {
 
   CH_IRQ_PROLOGUE();
   chSysLockFromISR();
-  palSetPad(GPIOE,14);
-
   ADC_ClearITPendingBit(ADC3, ADC_IT_EOS);
   ADC3->CR |= ADC_CR_ADSTART;
+  ADC1->CR |= ADC_CR_ADSTART;
 
   dt = 1.0/((float)FOC_F_SW);
 
@@ -1539,6 +1840,8 @@ CH_IRQ_HANDLER(VectorFC) {
   ADC1->CR |= ADC_CR_ADSTART;
 
   // Current calculation time: 1.944us
+  // UTIL_LP_FAST(mCtrl.ipa_is, ADC_CURR_A(), FOC_LP_FAST_CONSTANT);
+  // UTIL_LP_FAST(mCtrl.ipb_is, ADC_CURR_B(), FOC_LP_FAST_CONSTANT);
   mCtrl.ipa_is = ADC_CURR_A();
   mCtrl.ipb_is = ADC_CURR_B();
   mCtrl.ipc_is = -mCtrl.ipa_is -mCtrl.ipb_is;
@@ -1548,11 +1851,11 @@ CH_IRQ_HANDLER(VectorFC) {
 
   if((mControllerDebugCtr < (CONT_STORE_DEPTH/3)) || (!mStoreController))
   {
-    // mCtrl.iq_set = 2.0;
+    // mCtrl.iq_set = 3.0; 
   }
   else
   {
-    // mCtrl.iq_set = 4.0;
+    // mCtrl.iq_set = 5.0;
   }
 
   if(++speedSlowDownCtr == FOC_SPEED_CONTROLLER_SLOWDOWN)
@@ -1601,7 +1904,7 @@ CH_IRQ_HANDLER(VectorFC) {
     }
     else if(mState == MC_OPEN_LOOP)
     {
-      forcedCommutation();
+      forcedCommutation(dtcurrent);
     }
     else
     {
@@ -1627,7 +1930,7 @@ CH_IRQ_HANDLER(VectorFC) {
 #endif
 
 
-  palClearPad(GPIOE,14);
+  // palClearPad(GPIOE,14);
   chSysUnlockFromISR(); 
   CH_IRQ_EPILOGUE();
 }

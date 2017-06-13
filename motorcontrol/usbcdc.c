@@ -144,6 +144,20 @@ static void cmd_drv(BaseSequentialStream *chp, int argc, char *argv[])
   (void)argv;
   drvDumpStatus();
 }
+static void cmd_drvon(BaseSequentialStream *chp, int argc, char *argv[])
+{
+  (void)chp;
+  (void)argc;
+  (void)argv;
+  drvGateEnable();
+}
+static void cmd_drvoff(BaseSequentialStream *chp, int argc, char *argv[])
+{
+  (void)chp;
+  (void)argc;
+  (void)argv;
+  drvGateDisable();
+}
 static void cmd_duty(BaseSequentialStream *chp, int argc, char *argv[])
 {
   (void)chp;
@@ -152,6 +166,14 @@ static void cmd_duty(BaseSequentialStream *chp, int argc, char *argv[])
   if(argc<3) return;
   mcfSetDuty(atoi(argv[0]),atoi(argv[1]),atoi(argv[2]));
 }
+static void cmd_setcurr(BaseSequentialStream *chp, int argc, char *argv[])
+{
+  (void)chp;
+  (void)argc;
+  (void)argv;
+  if(argc<1) return;
+  mcfSetCurrent(stof(argv[0]));
+}
 static void cmd_sample(BaseSequentialStream *chp, int argc, char *argv[])
 {
   (void)chp;
@@ -159,6 +181,29 @@ static void cmd_sample(BaseSequentialStream *chp, int argc, char *argv[])
   (void)argv;
   mcfStartSample();
 }
+static void cmd_lock(BaseSequentialStream *chp, int argc, char *argv[])
+{
+  (void)chp;
+  (void)argc;
+  (void)argv;
+  mcfSetMotorLock(1);
+}
+static void cmd_release(BaseSequentialStream *chp, int argc, char *argv[])
+{
+  (void)chp;
+  (void)argc;
+  (void)argv;
+  mcfSetMotorLock(0);
+}
+static void cmd_volt(BaseSequentialStream *chp, int argc, char *argv[])
+{
+  (void)chp;
+  (void)argc;
+  (void)argv;
+  mcfDumpData();
+}
+
+
 static void cmd_get(BaseSequentialStream *chp, int argc, char *argv[])
 {
   (void)argc;
@@ -193,10 +238,16 @@ static const ShellCommand commands[] = {
 		{"mem", cmd_mem},
     {"threads", cmd_threads},
     {"drv", cmd_drv},
+    {"drvon", cmd_drvon},
+    {"drvoff", cmd_drvoff},
     {"duty", cmd_duty},
     {"get", cmd_get},
     {"set", cmd_set},
+    {"lock", cmd_lock},
+    {"release", cmd_release},
     {"sample", cmd_sample},
+    {"volt", cmd_volt},
+    {"setcurr", cmd_setcurr},
 		{NULL, NULL}
 };
 
